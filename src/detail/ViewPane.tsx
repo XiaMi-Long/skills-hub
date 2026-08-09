@@ -8,11 +8,13 @@ export default function ViewPane({
   raw,
   loading,
   onReveal,
+  onDelete,
 }: {
   instance: SkillInstance;
   raw: string | null;
   loading: boolean;
   onReveal: () => void;
+  onDelete: () => void;
 }) {
   const meta = AGENT_META[instance.agent_id];
   const hasMd = instance.has_skill_md;
@@ -43,9 +45,8 @@ export default function ViewPane({
           打开目录
         </button>
         <button
-          title="M2 实现:删除"
-          disabled
-          className="cursor-not-allowed rounded-lg px-2.5 py-1 text-[12px] text-[var(--text-muted)] opacity-60"
+          onClick={onDelete}
+          className="rounded-lg px-2.5 py-1 text-[12px] text-[var(--text-muted)] hover:bg-[var(--danger)]/10 hover:text-[var(--danger)]"
         >
           删除
         </button>
