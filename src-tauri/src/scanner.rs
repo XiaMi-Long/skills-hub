@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::agents::{AgentId, AGENTS};
-use crate::error::display_path;
+
 use crate::frontmatter::{parse_skill_md, read_skill_md_lossy};
 use crate::settings::Settings;
 use crate::skill::{group_key, ScanError, ScanResult, SkillGroup, SkillInstance};
@@ -193,6 +193,3 @@ pub fn find_agent_instance(
         .find(|i| group_key(&i.name) == key)
 }
 
-pub fn instance_abs_path_display(i: &SkillInstance) -> String {
-    display_path(&i.abs_path)
-}

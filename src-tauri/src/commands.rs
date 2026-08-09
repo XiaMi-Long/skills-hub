@@ -1,5 +1,6 @@
 use std::fs;
 use std::process::Command;
+use std::time::UNIX_EPOCH;
 
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
@@ -7,7 +8,7 @@ use tauri::{AppHandle, Manager};
 use crate::agents::AgentId;
 use crate::error::{AppError, AppResult};
 use crate::llm;
-use crate::scanner::{agent_base_dir, build_instance, find_agent_instance, scan_all};
+use crate::scanner::{agent_base_dir, build_instance, find_agent_instance};
 use crate::settings::{DeepseekSettings, Settings, SettingsStore};
 use crate::skill::{group_key, DeleteScope, SkillInstance, SyncDirective};
 use crate::sync::sync_one;
@@ -66,7 +67,7 @@ pub struct TranslateResult {
 #[tauri::command]
 pub fn scan_all(app: AppHandle) -> AppResult<crate::skill::ScanResult> {
     let settings = store(&app).load();
-    Ok(scan_all(&settings))
+    Ok(crate::scanner::scan_all(&settings))
 }
 
 // ---- 读取 ----
@@ -323,8 +324,9 @@ pub async fn translate_skill(
     let request_id = uuid::Uuid::new_v4().to_string();
     let app2 = app.clone();
     let abs_path = instance.abs_path.join("SKILL.md");
+    let rid = request_id.clone();
     tauri::async_runtime::spawn(async move {
-        llm::stream_translation_task(app2, request_id.clone(), abs_path, mtime, ds).await;
+        llm::stream_translation_task(app2, rid, abs_path, mtime, ds).await;
     });
 
     Ok(TranslateResult {

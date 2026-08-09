@@ -1,10 +1,11 @@
 use gray_matter::engine::YAML;
-use gray_matter::value::Pod;
+use gray_matter::Pod;
 use gray_matter::Matter;
 
 pub struct ParsedFrontmatter {
     pub name: Option<String>,
     pub description: Option<String>,
+    #[allow(dead_code)] // body 由 read_skill_md 原文直接提供,当前不用
     pub body: String,
 }
 

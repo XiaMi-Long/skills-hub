@@ -11,7 +11,7 @@ use async_openai::types::{
 use async_openai::Client;
 use futures::StreamExt;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::error::{AppError, AppResult};
 use crate::settings::DeepseekSettings;
@@ -173,7 +173,7 @@ pub async fn stream_translation_task(
                         let _ = app.emit(
                             "translate-error",
                             TranslateError {
-                                request_id,
+                                request_id: request_id.clone(),
                                 message: format!("流式响应错误: {e}"),
                             },
                         );
