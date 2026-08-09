@@ -8,6 +8,7 @@ import InstanceSelector from "./InstanceSelector";
 import ViewPane from "./ViewPane";
 import EditPane from "./EditPane";
 import DeleteDialog from "../modals/DeleteDialog";
+import SyncModal from "../modals/SyncModal";
 
 type Mode = "view" | "edit";
 
@@ -21,6 +22,7 @@ export default function SkillDetail() {
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<Mode>("view");
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
 
   const group = useMemo(
     () => scan?.groups.find((g) => g.name === selectedGroup) ?? null,
@@ -136,6 +138,7 @@ export default function SkillDetail() {
             loading={loading}
             onReveal={handleReveal}
             onDelete={() => setDeleteOpen(true)}
+            onSync={() => setSyncOpen(true)}
           />
         ) : (
           <EditPane
@@ -158,6 +161,13 @@ export default function SkillDetail() {
           group={group}
           defaultAgent={active.agent_id}
           onClose={() => setDeleteOpen(false)}
+        />
+      )}
+      {syncOpen && (
+        <SyncModal
+          group={group}
+          sourceAgent={active.agent_id}
+          onClose={() => setSyncOpen(false)}
         />
       )}
     </div>

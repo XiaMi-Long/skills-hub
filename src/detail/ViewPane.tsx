@@ -9,12 +9,14 @@ export default function ViewPane({
   loading,
   onReveal,
   onDelete,
+  onSync,
 }: {
   instance: SkillInstance;
   raw: string | null;
   loading: boolean;
   onReveal: () => void;
   onDelete: () => void;
+  onSync: () => void;
 }) {
   const meta = AGENT_META[instance.agent_id];
   const hasMd = instance.has_skill_md;
@@ -31,9 +33,8 @@ export default function ViewPane({
           翻译
         </button>
         <button
-          title="M3 实现:同步到其他 agent"
-          disabled
-          className="cursor-not-allowed rounded-lg px-2.5 py-1 text-[12px] text-[var(--text-muted)] opacity-60"
+          onClick={onSync}
+          className="rounded-lg px-2.5 py-1 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
         >
           同步到…
         </button>
