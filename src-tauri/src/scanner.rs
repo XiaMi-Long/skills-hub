@@ -193,3 +193,76 @@ pub fn find_agent_instance(
         .find(|i| group_key(&i.name) == key)
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agents::AgentId;
+    use crate::skill::SkillInstance;
+
+    fn inst(agent: AgentId, name: &str, hash: u64, has_md: bool) -> SkillInstance {
+        SkillInstance {
+            agent_id: agent,
+            abs_path: std::path::PathBuf::from(name),
+            name: name.into(),
+            description: String::new(),
+            supporting_files: 0,
+            has_skill_md: has_md,
+            mtime: 0,
+            content_hash: hash,
+        }
+    }
+
+    #[test]
+    fn groups_by_key_and_sorts_by_name() {
+        let all = vec![
+            inst(AgentId::Codex, "zeta", 1, true),
+            inst(AgentId::ClaudeCode, "alpha", 2, true),
+            inst(AgentId::Codex, "alpha", 2, true),
+        ];
+        let groups = build_groups(all);
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].name, "alpha");
+        assert_eq!(groups[1].name, "zeta");
+        // 组内按 AGENTS 表顺序:ClaudeCode(0) 在 Codex(1) 前
+        assert_eq!(groups[0].instances[0].agent_id, AgentId::ClaudeCode);
+        assert_eq!(groups[0].instances[1].agent_id, AgentId::Codex);
+    }
+
+    #[test]
+    fn drift_true_when_two_hashes() {
+        let all = vec![
+            inst(AgentId::ClaudeCode, "x", 10, true),
+            inst(AgentId::Codex, "x", 20, true),
+        ];
+        let groups = build_groups(all);
+        assert!(groups[0].drift);
+    }
+
+    #[test]
+    fn drift_false_when_same_or_no_skill_md() {
+        let same = vec![
+            inst(AgentId::ClaudeCode, "x", 10, true),
+            inst(AgentId::Codex, "x", 10, true),
+        ];
+        assert!(!build_groups(same)[0].drift);
+
+        // 无 SKILL.md 的实例不参与 drift 判定
+        let no_md = vec![
+            inst(AgentId::ClaudeCode, "x", 10, false),
+            inst(AgentId::Codex, "x", 20, false),
+        ];
+        assert!(!build_groups(no_md)[0].drift);
+    }
+
+    #[test]
+    fn case_insensitive_grouping() {
+        let all = vec![
+            inst(AgentId::ClaudeCode, "My Skill", 1, true),
+            inst(AgentId::Codex, "my-skill", 1, true),
+        ];
+        let groups = build_groups(all);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].name, "my-skill");
+    }
+}

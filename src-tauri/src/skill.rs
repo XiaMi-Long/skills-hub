@@ -75,3 +75,17 @@ pub fn group_key(name: &str) -> String {
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn group_key_normalizes_case_and_space() {
+        assert_eq!(group_key("My Skill"), "my-skill");
+        assert_eq!(group_key("my-skill"), "my-skill");
+        assert_eq!(group_key("MY SKILL"), "my-skill");
+        assert_eq!(group_key("  My   Skill  "), "my-skill");
+        assert_eq!(group_key("测试技能"), "测试技能");
+    }
+}

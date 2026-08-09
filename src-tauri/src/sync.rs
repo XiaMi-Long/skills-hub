@@ -85,3 +85,89 @@ pub fn sync_one(
     }
     stage_then_replace(src_dir, &target)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    fn make_tree(root: &std::path::Path) -> std::path::PathBuf {
+        let src = root.join("src-skill");
+        fs::create_dir_all(src.join("sub")).unwrap();
+        fs::write(src.join("SKILL.md"), "# Hello").unwrap();
+        fs::write(src.join("sub").join("note.txt"), "note").unwrap();
+        src
+    }
+
+    #[test]
+    fn overwrite_replaces_content() {
+        let dir = tempdir().unwrap();
+        let src = make_tree(dir.path());
+        let target_parent = dir.path().join("agents");
+        fs::create_dir_all(&target_parent).unwrap();
+        let target = target_parent.join("src-skill");
+        fs::create_dir_all(&target).unwrap();
+        fs::write(target.join("SKILL.md"), "# Old").unwrap();
+
+        sync_one(&src, &target_parent, OnConflict::Overwrite).unwrap();
+        assert_eq!(
+            fs::read_to_string(target.join("SKILL.md")).unwrap(),
+            "# Hello"
+        );
+        assert!(target.join("sub").join("note.txt").exists());
+        // 无 staging 残留
+        let leftovers: Vec<_> = fs::read_dir(&target_parent)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().starts_with(".skills-hub-staging"))
+            .collect();
+        assert!(leftovers.is_empty());
+    }
+
+    #[test]
+    fn skip_does_not_touch_existing() {
+        let dir = tempdir().unwrap();
+        let src = make_tree(dir.path());
+        let target_parent = dir.path().join("agents");
+        fs::create_dir_all(&target_parent).unwrap();
+        let target = target_parent.join("src-skill");
+        fs::create_dir_all(&target).unwrap();
+        fs::write(target.join("SKILL.md"), "# Keep").unwrap();
+
+        sync_one(&src, &target_parent, OnConflict::Skip).unwrap();
+        assert_eq!(
+            fs::read_to_string(target.join("SKILL.md")).unwrap(),
+            "# Keep"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_skipped_and_recorded() {
+        let dir = tempdir().unwrap();
+        let src = make_tree(dir.path());
+        std::os::unix::fs::symlink("SKILL.md", src.join("link.md")).unwrap();
+        let target_parent = dir.path().join("agents");
+        fs::create_dir_all(&target_parent).unwrap();
+
+        let outcome = sync_one(&src, &target_parent, OnConflict::Overwrite).unwrap();
+        assert_eq!(outcome.skipped.len(), 1);
+        assert!(!target_parent.join("src-skill").join("link.md").exists());
+    }
+
+    #[test]
+    fn fresh_copy_works() {
+        let dir = tempdir().unwrap();
+        let src = make_tree(dir.path());
+        let target_parent = dir.path().join("agents");
+        fs::create_dir_all(&target_parent).unwrap();
+        sync_one(&src, &target_parent, OnConflict::Overwrite).unwrap();
+        let target = target_parent.join("src-skill");
+        assert_eq!(
+            fs::read_to_string(target.join("SKILL.md")).unwrap(),
+            "# Hello"
+        );
+        assert!(target.join("sub").join("note.txt").exists());
+    }
+}

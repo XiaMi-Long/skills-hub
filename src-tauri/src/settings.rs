@@ -85,3 +85,39 @@ impl SettingsStore {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn atomic_write_roundtrip() {
+        let dir = tempdir().unwrap();
+        let store = SettingsStore::new(dir.path().to_path_buf());
+        let mut s = Settings::default();
+        s.agent_overrides.insert(AgentId::Codex, std::path::PathBuf::from("C:/tmp/codex"));
+        store.save(&s).unwrap();
+
+        let loaded = store.load();
+        assert_eq!(loaded.theme, Theme::Dark);
+        assert_eq!(
+            loaded.agent_overrides.get(&AgentId::Codex).unwrap().to_string_lossy(),
+            "C:/tmp/codex"
+        );
+        assert_eq!(loaded.deepseek.model, "deepseek-chat");
+        assert_eq!(loaded.deepseek.base_url, "https://api.deepseek.com/v1");
+        // 无 .tmp 残留
+        let entries: Vec<_> = std::fs::read_dir(dir.path()).unwrap().collect();
+        assert_eq!(entries.len(), 1);
+    }
+
+    #[test]
+    fn missing_file_loads_default() {
+        let dir = tempdir().unwrap();
+        let store = SettingsStore::new(dir.path().join("nope").to_path_buf());
+        let s = store.load();
+        assert_eq!(s.theme, Theme::Dark);
+        assert!(s.agent_overrides.is_empty());
+    }
+}
