@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ===== 视觉 token(spec §8)===== */
+:root {
+  --bg-app-from: #fafafa;
+  --bg-app-to: #f0f0f2;
+  --bg-pane: #ffffff;
+  --bg-elevated: #f4f4f5;
+  --bg-glass: rgba(255, 255, 255, 0.55);
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-strong: rgba(0, 0, 0, 0.14);
+  --text-primary: #18181b;
+  --text-secondary: #52525b;
+  --text-muted: #a1a1aa;
+  --accent-from: #f97316;
+  --accent-to: #f59e0b;
+  --danger: #ef4444;
+  --success: #22c55e;
+  --grain-opacity: 0.025;
+}
+
+.dark {
+  --bg-app-from: #0b0b0d;
+  --bg-app-to: #141418;
+  --bg-pane: #111114;
+  --bg-elevated: #17171c;
+  --bg-glass: rgba(20, 20, 22, 0.6);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text-primary: #ededed;
+  --text-secondary: #a1a1aa;
+  --text-muted: #6b7280;
+  --accent-from: #f97316;
+  --accent-to: #f59e0b;
+  --danger: #ef4444;
+  --success: #22c55e;
+  --grain-opacity: 0.04;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: linear-gradient(180deg, var(--bg-app-from), var(--bg-app-to));
+  color: var(--text-primary);
+  font-family: Inter, "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* mono 字体:路径/计数/chip */
+.mono {
+  font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
+}
+
+/* 磨砂玻璃:仅浮层/IconRail/TopToolbar */
+.glass {
+  background: var(--bg-glass);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+}
+
+/* accent 渐变:仅主按钮/active pill/进度条 */
+.accent-gradient {
+  background: linear-gradient(90deg, var(--accent-from), var(--accent-to));
+}
+
+/* 颗粒噪点层(单层无动画) */
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 5px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 控件基础 */
+input,
+textarea {
+  user-select: text;
+}
