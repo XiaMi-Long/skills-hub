@@ -6,6 +6,9 @@ import SettingsPage from "./settings/SettingsPage";
 import { applyTheme, useAppStore } from "./store/app";
 import { useSkillsStore } from "./store/skills";
 import { useSettingsStore } from "./store/settings";
+import { useTranslateStore } from "./store/translate";
+import { listen } from "@tauri-apps/api/event";
+import type { TranslateChunkEvent, TranslateDoneEvent, TranslateErrorEvent } from "./types/api";
 
 export default function App() {
   const resolvedTheme = useAppStore((s) => s.resolvedTheme);
@@ -64,6 +67,25 @@ export default function App() {
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
+  }, []);
+
+  // 翻译事件:chunk 累积 / done / error
+  useEffect(() => {
+    const store = useTranslateStore.getState();
+    const unChunk = listen<TranslateChunkEvent>("translate-chunk", (e) => {
+      store.append(e.payload.request_id, e.payload.delta);
+    });
+    const unDone = listen<TranslateDoneEvent>("translate-done", (e) => {
+      store.finish(e.payload.request_id, e.payload.text);
+    });
+    const unError = listen<TranslateErrorEvent>("translate-error", (e) => {
+      store.fail(e.payload.request_id, e.payload.message);
+    });
+    return () => {
+      unChunk.then((f) => f());
+      unDone.then((f) => f());
+      unError.then((f) => f());
+    };
   }, []);
 
   return (

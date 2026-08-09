@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import Markdown from "../md/Markdown";
 import { displayPath } from "../lib/paths";
 import type { SkillInstance } from "../types/api";
@@ -10,6 +11,14 @@ export default function ViewPane({
   onReveal,
   onDelete,
   onSync,
+  translateMode,
+  translatedText,
+  translating,
+  translateError,
+  translateDisabled,
+  model,
+  onTranslate,
+  onShowOriginal,
 }: {
   instance: SkillInstance;
   raw: string | null;
@@ -17,21 +26,55 @@ export default function ViewPane({
   onReveal: () => void;
   onDelete: () => void;
   onSync: () => void;
+  translateMode: boolean;
+  translatedText: string | null;
+  translating: boolean;
+  translateError: string | null;
+  translateDisabled: boolean;
+  model: string;
+  onTranslate: () => void;
+  onShowOriginal: () => void;
 }) {
   const meta = AGENT_META[instance.agent_id];
   const hasMd = instance.has_skill_md;
+
+  // 流式翻译渲染节流 100ms
+  const [rendered, setRendered] = useState<string>("");
+  useEffect(() => {
+    if (!translateMode) return;
+    if (!translating) {
+      setRendered(translatedText ?? "");
+      return;
+    }
+    const t = setTimeout(() => setRendered(translatedText ?? ""), 100);
+    return () => clearTimeout(t);
+  }, [translateMode, translatedText, translating]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* 工具条 */}
       <div className="flex shrink-0 items-center gap-2 border-b border-[var(--border-subtle)] px-4 py-2">
-        <button
-          title="M5 实现:DeepSeek 翻译"
-          disabled
-          className="cursor-not-allowed rounded-lg px-2.5 py-1 text-[12px] text-[var(--text-muted)] opacity-60"
-        >
-          翻译
-        </button>
+        {translateMode ? (
+          <button
+            onClick={onShowOriginal}
+            className="rounded-lg border border-[var(--border-subtle)] px-2.5 py-1 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+          >
+            查看原文
+          </button>
+        ) : (
+          <button
+            onClick={onTranslate}
+            disabled={translateDisabled}
+            title={
+              translateDisabled
+                ? "在设置中配置 DeepSeek API Key"
+                : undefined
+            }
+            className={`rounded-lg border border-[var(--border-subtle)] px-2.5 py-1 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50`}
+          >
+            翻译
+          </button>
+        )}
         <button
           onClick={onSync}
           className="rounded-lg px-2.5 py-1 text-[12px] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
@@ -72,7 +115,28 @@ export default function ViewPane({
 
       {/* 内容 */}
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        {loading ? (
+        {translateMode && (
+          <div className="mb-3 flex items-center gap-2">
+            <span className="rounded-md bg-[var(--bg-elevated)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">
+              已翻译 · {model}
+            </span>
+            {translating && (
+              <span className="text-[11px] text-[var(--text-muted)]">流式翻译中…</span>
+            )}
+          </div>
+        )}
+
+        {translateMode ? (
+          translateError ? (
+            <div className="text-[12px] text-[var(--danger)]">翻译失败: {translateError}</div>
+          ) : rendered ? (
+            <Markdown text={rendered} />
+          ) : translating ? (
+            <div className="text-[12px] text-[var(--text-muted)]">等待翻译内容…</div>
+          ) : (
+            <div className="text-[12px] text-[var(--text-muted)]">暂无译文。</div>
+          )
+        ) : loading ? (
           <div className="text-[12px] text-[var(--text-muted)]">加载中…</div>
         ) : !hasMd ? (
           <div className="text-[12px] text-[var(--text-muted)]">

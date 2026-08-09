@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { revealInExplorer, readSkillMd } from "../api/commands";
+import { revealInExplorer, readSkillMd, translateSkill } from "../api/commands";
 import { AGENT_ORDER } from "../lib/agents";
 import { useSkillsStore } from "../store/skills";
+import { useSettingsStore } from "../store/settings";
+import { useTranslateStore } from "../store/translate";
 import { toast } from "../store/toast";
 import type { AgentId, SkillInstance } from "../types/api";
 import InstanceSelector from "./InstanceSelector";
@@ -17,12 +19,19 @@ export default function SkillDetail() {
   const selectedGroup = useSkillsStore((s) => s.selectedGroup);
   const viewAgent = useSkillsStore((s) => s.viewAgent);
   const setViewAgent = useSkillsStore((s) => s.setViewAgent);
+  const settings = useSettingsStore((s) => s.settings);
 
   const [raw, setRaw] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<Mode>("view");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
+
+  // 翻译态
+  const [translateMode, setTranslateMode] = useState(false);
+  const [requestId, setRequestId] = useState<string | null>(null);
+  const [cachedText, setCachedText] = useState<string | null>(null);
+  const translateEntry = useTranslateStore((s) => (requestId ? s.byRequest[requestId] : undefined));
 
   const group = useMemo(
     () => scan?.groups.find((g) => g.name === selectedGroup) ?? null,
@@ -46,9 +55,12 @@ export default function SkillDetail() {
     return ordered.find((i) => i.agent_id === viewAgent) ?? defaultInstance;
   }, [viewAgent, ordered, defaultInstance]);
 
-  // 切换副本/技能 → 重新读取原文,回到查看态
+  // 切换副本/技能 → 重新读取原文,回到查看态,清空翻译
   useEffect(() => {
     setMode("view");
+    setTranslateMode(false);
+    setRequestId(null);
+    setCachedText(null);
     if (!group || !active || !active.has_skill_md) {
       setRaw(null);
       return;
@@ -88,7 +100,37 @@ export default function SkillDetail() {
     );
   };
 
-  const canEdit = active.has_skill_md && raw !== null;
+  const apiKey = settings?.deepseek.api_key?.trim() ?? "";
+  const model = settings?.deepseek.model ?? "deepseek-chat";
+
+  const handleTranslate = async () => {
+    if (!group || !active || !active.has_skill_md) return;
+    if (!apiKey) {
+      toast.error("请先在设置中配置 DeepSeek API Key");
+      return;
+    }
+    setTranslateMode(true);
+    try {
+      const r = await translateSkill(active.agent_id, group.name);
+      if (r.cached) {
+        toast.info("已命中缓存,直接显示译文");
+        setCachedText(r.text);
+        setRequestId(null);
+      } else {
+        setCachedText(null);
+        setRequestId(r.request_id);
+        useTranslateStore.getState().begin(r.request_id);
+      }
+    } catch (e) {
+      setTranslateMode(false);
+      toast.error(`翻译失败: ${(e as { message?: string })?.message ?? e}`);
+    }
+  };
+
+  const translatedText = cachedText ?? translateEntry?.text ?? null;
+  const translating = translateEntry?.status === "streaming";
+  const translateError = translateEntry?.status === "error" ? translateEntry.error ?? null : null;
+  const canEdit = active.has_skill_md && raw !== null && !translateMode;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--bg-pane)]">
@@ -117,7 +159,13 @@ export default function SkillDetail() {
                 if (m === "edit" && !canEdit) return;
                 setMode(m);
               }}
-              title={m === "edit" && !canEdit ? "该副本没有可编辑的 SKILL.md" : undefined}
+              title={
+                m === "edit" && translateMode
+                  ? "翻译视图只读,切回原文可编辑"
+                  : m === "edit" && !canEdit
+                    ? "该副本没有可编辑的 SKILL.md"
+                    : undefined
+              }
               className={`rounded-t-lg border-b-2 px-3 py-1.5 text-[12px] transition-colors ${
                 mode === m
                   ? "border-[var(--accent-to)] text-[var(--text-primary)]"
@@ -139,6 +187,18 @@ export default function SkillDetail() {
             onReveal={handleReveal}
             onDelete={() => setDeleteOpen(true)}
             onSync={() => setSyncOpen(true)}
+            translateMode={translateMode}
+            translatedText={translatedText}
+            translating={translating}
+            translateError={translateError}
+            translateDisabled={!apiKey}
+            model={model}
+            onTranslate={handleTranslate}
+            onShowOriginal={() => {
+              setTranslateMode(false);
+              setRequestId(null);
+              setCachedText(null);
+            }}
           />
         ) : (
           <EditPane
