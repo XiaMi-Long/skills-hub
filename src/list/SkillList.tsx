@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useSkillsStore } from "../store/skills";
 import SkillRow from "./SkillRow";
 import type { AgentId } from "../types/api";
@@ -23,6 +23,13 @@ export default function SkillList() {
   const selectGroup = useSkillsStore((s) => s.selectGroup);
   const agentFilter = useSkillsStore((s) => s.agentFilter);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // Ctrl+F 聚焦搜索框(App 层派发 focus-search 事件)
+  useEffect(() => {
+    const h = () => searchRef.current?.focus();
+    window.addEventListener("focus-search", h);
+    return () => window.removeEventListener("focus-search", h);
+  }, []);
 
   const filtered = useMemo(() => {
     if (!scan) return [];
