@@ -7,7 +7,7 @@ export default function AgentBadge({ agentId, dim }: { agentId: AgentId; dim?: b
   const short = meta.display.split(" ")[0];
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-md border border-[var(--border-subtle)] px-1.5 py-px text-[11px] leading-4 ${
+      className={`inline-flex items-center gap-1 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/60 px-1.5 py-px text-[11px] leading-4 ${
         dim ? "text-[var(--text-muted)]" : "text-[var(--text-secondary)]"
       }`}
     >

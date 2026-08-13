@@ -19,6 +19,9 @@ export default function SkillRow({
           : "hover:bg-[var(--bg-elevated)]/60"
       }`}
     >
+      {active && (
+        <span className="accent-gradient absolute top-1/2 left-0.5 h-4 w-[2.5px] -translate-y-1/2 rounded-full" />
+      )}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="truncate text-[13px] font-medium text-[var(--text-primary)]">
@@ -36,11 +39,11 @@ export default function SkillRow({
           ))}
         </div>
       </div>
-      {/* 漂移橙点 */}
+      {/* 漂移点(警示语义,不随色调变化) */}
       {group.drift && (
         <span
           title="副本内容不一致"
-          className="absolute top-1/2 right-1.5 h-[6px] w-[6px] -translate-y-1/2 rounded-full bg-[#f59e0b]"
+          className="absolute top-1/2 right-1.5 h-[6px] w-[6px] -translate-y-1/2 rounded-full bg-[var(--warning)]"
         />
       )}
     </button>

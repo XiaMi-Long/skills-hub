@@ -1,10 +1,8 @@
 import IconRail from "./IconRail";
 import TopToolbar from "./TopToolbar";
-import GrainOverlay from "./GrainOverlay";
 import AgentSidebar from "../sidebar/AgentSidebar";
 import SkillList from "../list/SkillList";
 import SkillDetail from "../detail/SkillDetail";
-import ToastHost from "../ui/Toast";
 
 export default function AppShell() {
   return (
@@ -25,8 +23,6 @@ export default function AppShell() {
           <SkillDetail />
         </main>
       </div>
-      <GrainOverlay />
-      <ToastHost />
     </div>
   );
 }

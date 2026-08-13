@@ -37,7 +37,7 @@ export default function InstanceSelector({
             className={`flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] transition-colors ${
               isActive
                 ? "border-[var(--border-strong)] bg-[var(--bg-elevated)] text-[var(--text-primary)]"
-                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                : "border-transparent text-[var(--text-muted)] hover:border-[var(--border-subtle)] hover:text-[var(--text-secondary)]"
             }`}
           >
             <span
@@ -46,7 +46,9 @@ export default function InstanceSelector({
             />
             {meta.display}
             {!inst.has_skill_md && <span className="text-[10px] opacity-70">无 SKILL.md</span>}
-            {isSelected && <span className="text-[10px] opacity-70">·选中</span>}
+            {isSelected && (
+              <span className="accent-gradient h-[5px] w-[5px] rounded-full" title="当前查看" />
+            )}
           </button>
         );
       })}

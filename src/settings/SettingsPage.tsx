@@ -1,14 +1,18 @@
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { AGENT_META, AGENT_ORDER } from "../lib/agents";
-import { testDeepseek } from "../api/commands";
+import { ACCENTS } from "../lib/accents";
+import { cancelTranslateAll, testDeepseek, translateAll } from "../api/commands";
 import { useSettingsStore } from "../store/settings";
 import { useSkillsStore } from "../store/skills";
 import { useAppStore } from "../store/app";
+import { useTranslateStore } from "../store/translate";
 import { toast } from "../store/toast";
 import Button from "../ui/Button";
 import Input from "../ui/Input";
-import type { AgentId, Settings, Theme } from "../types/api";
+import Radio from "../ui/Radio";
+import Select from "../ui/Select";
+import type { AgentId, Settings, SkillOpenView, Theme, TranslateTo } from "../types/api";
 
 const MODELS = ["deepseek-chat", "deepseek-reasoner"];
 
@@ -17,6 +21,8 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
   const saveSettings = useSettingsStore((s) => s.save);
   const refresh = useSkillsStore((s) => s.refresh);
   const setTheme = useAppStore((s) => s.setTheme);
+  const setAccent = useAppStore((s) => s.setAccent);
+  const batch = useTranslateStore((s) => s.batch);
 
   const [draft, setDraft] = useState<Settings | null>(stored);
   const [testing, setTesting] = useState(false);
@@ -80,6 +86,20 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
     }
   };
 
+  const startBatch = async () => {
+    try {
+      const r = await translateAll();
+      useTranslateStore.getState().batchStart(r.total);
+      toast.info(`已开始批量翻译 ${r.total} 个技能(内容去重后),可在下方查看进度`);
+    } catch (e) {
+      toast.error(`启动失败: ${(e as { message?: string })?.message ?? e}`);
+    }
+  };
+
+  const cancelBatch = () => {
+    cancelTranslateAll().catch(() => {});
+  };
+
   return (
     <div className="h-full overflow-y-auto bg-[var(--bg-pane)]">
       <div className="mx-auto max-w-[720px] px-6 py-5">
@@ -91,18 +111,47 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
         {/* 主题 */}
         <section className="mb-5 rounded-[10px] border border-[var(--border-subtle)] p-4">
           <h2 className="mb-3 text-[13px] font-semibold text-[var(--text-primary)]">主题</h2>
-          <div className="flex gap-4">
+          <div className="flex gap-5">
             {(["dark", "light", "system"] as Theme[]).map((t) => (
-              <label key={t} className="flex cursor-pointer items-center gap-1.5 text-[13px] text-[var(--text-secondary)]">
-                <input
-                  type="radio"
-                  checked={draft.theme === t}
-                  onChange={() => setTheme2(t)}
-                  className="accent-[#f97316]"
-                />
+              <Radio
+                key={t}
+                checked={draft.theme === t}
+                onChange={() => setTheme2(t)}
+                className="text-[13px] text-[var(--text-secondary)]"
+              >
                 {t === "dark" ? "暗色" : t === "light" ? "亮色" : "跟随系统"}
-              </label>
+              </Radio>
             ))}
+          </div>
+        </section>
+
+        {/* 色调 */}
+        <section className="mb-5 rounded-[10px] border border-[var(--border-subtle)] p-4">
+          <h2 className="mb-3 text-[13px] font-semibold text-[var(--text-primary)]">色调</h2>
+          <div className="flex flex-wrap gap-2">
+            {ACCENTS.map((a) => {
+              const active = draft.accent === a.id;
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => {
+                    setDraft({ ...draft, accent: a.id });
+                    setAccent(a.id);
+                  }}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[12px] transition-colors ${
+                    active
+                      ? "border-[var(--border-strong)] bg-[var(--bg-elevated)] text-[var(--text-primary)]"
+                      : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]/50"
+                  }`}
+                >
+                  <span
+                    className="h-4 w-4 rounded-full"
+                    style={{ background: `linear-gradient(90deg, ${a.from}, ${a.to})` }}
+                  />
+                  {a.label}
+                </button>
+              );
+            })}
           </div>
         </section>
 
@@ -156,32 +205,24 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
                 onChange={(e) => setDraft({ ...draft, deepseek: { ...draft.deepseek, api_key: e.target.value } })}
                 placeholder="sk-…"
               />
-              <p className="mt-1 text-[11px] text-[#f59e0b]">
+              <p className="mt-1 text-[11px] text-[var(--warning)]">
                 ⚠ key 仅存本机 app 数据目录(明文),不会上传任何其他位置
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-[12px] text-[var(--text-secondary)]">模型</label>
-                <select
+                <Select
                   value={customModel ? "custom" : draft.deepseek.model}
-                  onChange={(e) => {
-                    if (e.target.value === "custom") {
-                      setCustomModel(true);
-                    } else {
+                  onChange={(v) => {
+                    if (v === "custom") setCustomModel(true);
+                    else {
                       setCustomModel(false);
-                      setDraft({ ...draft, deepseek: { ...draft.deepseek, model: e.target.value } });
+                      setDraft({ ...draft, deepseek: { ...draft.deepseek, model: v } });
                     }
                   }}
-                  className="h-8 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 text-[13px] text-[var(--text-primary)] focus:outline-none"
-                >
-                  {MODELS.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                  <option value="custom">自定义…</option>
-                </select>
+                  options={[...MODELS.map((m) => ({ value: m, label: m })), { value: "custom", label: "自定义…" }]}
+                />
                 {customModel && (
                   <Input
                     className="mt-1.5"
@@ -201,11 +242,82 @@ export default function SettingsPage({ onBack }: { onBack: () => void }) {
               </div>
             </div>
             <div>
+              <label className="mb-1 block text-[12px] text-[var(--text-secondary)]">目标语言</label>
+              <div className="flex gap-5">
+                {(["zh", "en"] as TranslateTo[]).map((t) => (
+                  <Radio
+                    key={t}
+                    checked={draft.deepseek.translate_to === t}
+                    onChange={() =>
+                      setDraft({ ...draft, deepseek: { ...draft.deepseek, translate_to: t } })
+                    }
+                    className="text-[13px] text-[var(--text-secondary)]"
+                  >
+                    {t === "zh" ? "中文" : "英文"}
+                  </Radio>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-[12px] text-[var(--text-secondary)]">打开技能时默认显示</label>
+              <div className="flex gap-5">
+                {(["original", "translated"] as SkillOpenView[]).map((v) => (
+                  <Radio
+                    key={v}
+                    checked={draft.default_view === v}
+                    onChange={() => setDraft({ ...draft, default_view: v })}
+                    className="text-[13px] text-[var(--text-secondary)]"
+                  >
+                    {v === "original" ? "原文" : "译文"}
+                  </Radio>
+                ))}
+              </div>
+              <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+                选「译文」时,打开技能优先显示缓存翻译;无缓存会提示翻译,原文变更后提示重新翻译。
+              </p>
+            </div>
+            <div>
               <Button onClick={test} disabled={testing}>
                 {testing ? "测试中…" : "连接测试"}
               </Button>
             </div>
           </div>
+        </section>
+
+        {/* 一键翻译全部 */}
+        <section className="mb-5 rounded-[10px] border border-[var(--border-subtle)] p-4">
+          <h2 className="mb-3 text-[13px] font-semibold text-[var(--text-primary)]">一键翻译全部</h2>
+          <p className="mb-3 text-[12px] leading-relaxed text-[var(--text-secondary)]">
+            按内容去重后依次翻译全部已安装 skill 并写入本地缓存,之后打开即可直接显示译文。
+            <span className="text-[var(--warning)]">注意:会消耗 DeepSeek API 额度。</span>
+          </p>
+          <div className="mb-3 flex items-center gap-2">
+            <Button
+              variant="primary"
+              disabled={!draft.deepseek.api_key.trim() || batch.running}
+              title={!draft.deepseek.api_key.trim() ? "请先配置 DeepSeek API Key" : undefined}
+              onClick={startBatch}
+            >
+              {batch.running ? "翻译中…" : "开始翻译全部"}
+            </Button>
+          </div>
+          {batch.running && (
+            <div className="space-y-2">
+              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--bg-elevated)]">
+                <div
+                  className="accent-gradient h-full rounded-full transition-[width] duration-300"
+                  style={{ width: `${batch.total ? Math.round((batch.done / batch.total) * 100) : 0}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-[var(--text-secondary)]">
+                  已处理 {batch.done}/{batch.total}
+                  {batch.current ? ` · 当前: ${batch.current}` : ""}
+                </span>
+                <Button onClick={cancelBatch}>取消</Button>
+              </div>
+            </div>
+          )}
         </section>
 
         <div className="flex items-center justify-between">

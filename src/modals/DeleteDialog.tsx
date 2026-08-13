@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Modal from "../ui/Modal";
 import Button from "../ui/Button";
+import Radio from "../ui/Radio";
 import { AGENT_META } from "../lib/agents";
 import { deleteSkill } from "../api/commands";
 import { toast } from "../store/toast";
@@ -47,32 +48,28 @@ export default function DeleteDialog({
           此操作不可撤销。
         </p>
 
-        <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-[13px] text-[var(--text-secondary)]">
-          <input
-            type="radio"
-            checked={scope === "thisCopy"}
-            onChange={() => setScope("thisCopy")}
-            className="accent-[#f97316]"
-          />
+        <Radio
+          checked={scope === "thisCopy"}
+          onChange={() => setScope("thisCopy")}
+          className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-[13px] text-[var(--text-secondary)]"
+        >
           <span>
             仅此副本
             <span className="ml-1.5 text-[11px] text-[var(--text-muted)]">
               {AGENT_META[defaultAgent].display}
             </span>
           </span>
-        </label>
-        <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-[13px] text-[var(--text-secondary)]">
-          <input
-            type="radio"
-            checked={scope === "allCopies"}
-            onChange={() => setScope("allCopies")}
-            className="accent-[#f97316]"
-          />
+        </Radio>
+        <Radio
+          checked={scope === "allCopies"}
+          onChange={() => setScope("allCopies")}
+          className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-[13px] text-[var(--text-secondary)]"
+        >
           <span>
             所有副本
             <span className="ml-1.5 text-[11px] text-[var(--text-muted)]">共 {n} 个</span>
           </span>
-        </label>
+        </Radio>
 
         <div className="flex justify-end gap-2 pt-1">
           <Button onClick={onClose}>取消</Button>

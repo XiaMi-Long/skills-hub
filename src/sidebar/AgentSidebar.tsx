@@ -28,12 +28,15 @@ export default function AgentSidebar() {
       <div className="flex-1 overflow-y-auto px-2 pb-2">
         <button
           onClick={() => setAgentFilter(null)}
-          className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors ${
+          className={`relative flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors ${
             agentFilter === null
               ? "bg-[var(--bg-elevated)] text-[var(--text-primary)]"
               : "text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]/60"
           }`}
         >
+          {agentFilter === null && (
+            <span className="accent-gradient absolute top-1/2 left-0.5 h-3.5 w-[2.5px] -translate-y-1/2 rounded-full" />
+          )}
           <span className="font-medium">全部技能</span>
           <span className="mono text-[11px] text-[var(--text-muted)]">{allCount}</span>
         </button>
@@ -46,12 +49,15 @@ export default function AgentSidebar() {
             <button
               key={id}
               onClick={() => setAgentFilter(id)}
-              className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors ${
+              className={`relative flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors ${
                 active
                   ? "bg-[var(--bg-elevated)] text-[var(--text-primary)]"
                   : "text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]/60"
               }`}
             >
+              {active && (
+                <span className="accent-gradient absolute top-1/2 left-0.5 h-3.5 w-[2.5px] -translate-y-1/2 rounded-full" />
+              )}
               <span
                 className="h-[7px] w-[7px] shrink-0 rounded-full"
                 style={{ background: meta.color }}

@@ -17,9 +17,9 @@ export default function IconRail() {
       <button
         onClick={() => setRoute(route === "settings" ? "main" : "settings")}
         title="设置"
-        className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+        className={`relative flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 ${
           route === "settings"
-            ? "bg-[var(--bg-elevated)] text-[var(--text-primary)]"
+            ? "accent-gradient text-black/85 shadow-[0_0_12px_color-mix(in_srgb,var(--accent-from)_30%,transparent)]"
             : "text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
         }`}
       >

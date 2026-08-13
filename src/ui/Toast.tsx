@@ -16,7 +16,7 @@ export default function ToastHost() {
         <button
           key={t.id}
           onClick={() => dismiss(t.id)}
-          className={`glass pointer-events-auto flex max-w-[480px] items-center gap-2 rounded-[10px] border px-3.5 py-2 text-[12px] shadow-[0_1px_2px_rgba(0,0,0,0.4)] ${STYLES[t.type]}`}
+          className={`glass animate-toast-in pointer-events-auto flex max-w-[480px] items-center gap-2 rounded-[10px] border px-3.5 py-2 text-[12px] shadow-[0_1px_2px_rgba(0,0,0,0.4)] ${STYLES[t.type]}`}
         >
           {t.type === "success" ? "✓" : t.type === "error" ? "✕" : "ℹ"}
           <span>{t.message}</span>

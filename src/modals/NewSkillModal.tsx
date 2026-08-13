@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import Modal from "../ui/Modal";
 import Button from "../ui/Button";
 import Input from "../ui/Input";
+import Checkbox from "../ui/Checkbox";
 import { AGENT_META, AGENT_ORDER } from "../lib/agents";
 import { createSkill } from "../api/commands";
 import { toast } from "../store/toast";
@@ -111,7 +112,7 @@ export default function NewSkillModal({ onClose }: { onClose: () => void }) {
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder={TEMPLATE(name || "my-skill")}
-            className="h-40 w-full resize-y rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3 py-2 font-mono text-[12px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] focus:outline-none"
+            className="h-40 w-full resize-y rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3 py-2 font-mono text-[12px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-[border-color,box-shadow] duration-150 hover:border-[var(--border-strong)] focus:border-[var(--accent-from)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent-from)_18%,transparent)] focus:outline-none"
           />
         </div>
 
@@ -125,46 +126,40 @@ export default function NewSkillModal({ onClose }: { onClose: () => void }) {
               const checked = targets.has(a);
               const conflicted = conflicts.includes(a);
               return (
-                <label
+                <Checkbox
                   key={a}
-                  className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[12px] transition-colors ${
+                  checked={checked}
+                  onChange={() => toggleTarget(a)}
+                  className={`items-center rounded-lg border px-2.5 py-1.5 text-[12px] transition-colors ${
                     checked
-                      ? "border-[var(--border-strong)] bg-[var(--bg-elevated)]"
-                      : "border-[var(--border-subtle)] hover:bg-[var(--bg-elevated)]/50"
+                      ? "border-[var(--border-strong)] bg-[var(--bg-elevated)] text-[var(--text-primary)]"
+                      : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]/50"
                   }`}
                 >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleTarget(a)}
-                    className="accent-[#f97316]"
-                  />
                   <span className="h-[6px] w-[6px] rounded-full" style={{ background: meta.color }} />
                   <span className="flex-1">{meta.display}</span>
                   {conflicted && (
-                    <span className="text-[10px] text-[#f59e0b]">已存在</span>
+                    <span className="text-[10px] text-[var(--warning)]">已存在</span>
                   )}
-                </label>
+                </Checkbox>
               );
             })}
           </div>
         </div>
 
         {conflicts.length > 0 && (
-          <div className="rounded-lg border border-[#f59e0b]/40 bg-[#f59e0b]/10 px-3 py-2">
-            <p className="text-[12px] text-[#f59e0b]">
+          <div className="rounded-lg border border-[var(--warning)]/40 bg-[var(--warning)]/10 px-3 py-2">
+            <p className="text-[12px] text-[var(--warning)]">
               以下 agent 已有同名技能:{" "}
               {conflicts.map((a) => AGENT_META[a].display).join("、")}
             </p>
-            <label className="mt-1.5 flex cursor-pointer items-center gap-2 text-[12px] text-[var(--text-secondary)]">
-              <input
-                type="checkbox"
-                checked={overwrite}
-                onChange={(e) => setOverwrite(e.target.checked)}
-                className="accent-[#f97316]"
-              />
+            <Checkbox
+              checked={overwrite}
+              onChange={setOverwrite}
+              className="mt-1.5 text-[12px] text-[var(--text-secondary)]"
+            >
               覆盖已有副本
-            </label>
+            </Checkbox>
           </div>
         )}
 

@@ -7,8 +7,15 @@ import { applyTheme, useAppStore } from "./store/app";
 import { useSkillsStore } from "./store/skills";
 import { useSettingsStore } from "./store/settings";
 import { useTranslateStore } from "./store/translate";
+import { toast } from "./store/toast";
 import { listen } from "@tauri-apps/api/event";
-import type { TranslateChunkEvent, TranslateDoneEvent, TranslateErrorEvent } from "./types/api";
+import type {
+  TranslateAllDoneEvent,
+  TranslateAllProgressEvent,
+  TranslateChunkEvent,
+  TranslateDoneEvent,
+  TranslateErrorEvent,
+} from "./types/api";
 
 export default function App() {
   const resolvedTheme = useAppStore((s) => s.resolvedTheme);
@@ -20,11 +27,14 @@ export default function App() {
     applyTheme(resolvedTheme);
   }, [resolvedTheme]);
 
-  // mount:加载设置(应用已保存主题)+ 首次扫描
+  // mount:加载设置(应用已保存主题/色调)+ 首次扫描
   useEffect(() => {
     loadSettings().then(() => {
       const saved = useSettingsStore.getState().settings;
-      if (saved) useAppStore.getState().setTheme(saved.theme);
+      if (saved) {
+        useAppStore.getState().setTheme(saved.theme);
+        useAppStore.getState().setAccent(saved.accent);
+      }
     });
     refresh();
   }, [loadSettings, refresh]);
@@ -69,7 +79,7 @@ export default function App() {
     return () => window.removeEventListener("keydown", h);
   }, []);
 
-  // 翻译事件:chunk 累积 / done / error
+  // 翻译事件:chunk 累积 / done / error / 批量进度
   useEffect(() => {
     const store = useTranslateStore.getState();
     const unChunk = listen<TranslateChunkEvent>("translate-chunk", (e) => {
@@ -81,10 +91,29 @@ export default function App() {
     const unError = listen<TranslateErrorEvent>("translate-error", (e) => {
       store.fail(e.payload.request_id, e.payload.message);
     });
+    const unBatchProgress = listen<TranslateAllProgressEvent>("translate-all-progress", (e) => {
+      useTranslateStore.getState().batchProgress(e.payload.done, e.payload.total, e.payload.current);
+    });
+    const unBatchDone = listen<TranslateAllDoneEvent>("translate-all-done", (e) => {
+      useTranslateStore.getState().batchFinish();
+      const p = e.payload;
+      if (p.cancelled) {
+        toast.info(`批量翻译已取消:完成 ${p.translated} 个`);
+      } else if (p.failed === 0) {
+        toast.success(`批量翻译完成:新翻译 ${p.translated} 个,命中缓存 ${p.skipped} 个`);
+      } else {
+        const first = p.errors[0];
+        toast.error(
+          `批量翻译完成:成功 ${p.translated} 个,缓存 ${p.skipped} 个,失败 ${p.failed} 个${first ? ` · ${first.name}: ${first.message}` : ""}`,
+        );
+      }
+    });
     return () => {
       unChunk.then((f) => f());
       unDone.then((f) => f());
       unError.then((f) => f());
+      unBatchProgress.then((f) => f());
+      unBatchDone.then((f) => f());
     };
   }, []);
 

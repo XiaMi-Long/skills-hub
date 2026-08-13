@@ -20,11 +20,59 @@ impl Default for Theme {
     }
 }
 
+/// 系统色调(前端映射到 --accent-from/--accent-to 渐变)。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Accent {
+    Blue,
+    Orange,
+    Green,
+    Purple,
+    Pink,
+}
+
+impl Default for Accent {
+    fn default() -> Self {
+        Accent::Blue
+    }
+}
+
+/// 翻译目标语言。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum TranslateTo {
+    Zh,
+    En,
+}
+
+impl Default for TranslateTo {
+    fn default() -> Self {
+        TranslateTo::Zh
+    }
+}
+
+/// 打开技能时的默认视图。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SkillOpenView {
+    Original,
+    Translated,
+}
+
+impl Default for SkillOpenView {
+    fn default() -> Self {
+        SkillOpenView::Original
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeepseekSettings {
     pub api_key: String,
     pub model: String,
     pub base_url: String,
+    /// 旧配置无此字段 → 默认中文
+    #[serde(default)]
+    pub translate_to: TranslateTo,
 }
 
 impl Default for DeepseekSettings {
@@ -33,6 +81,7 @@ impl Default for DeepseekSettings {
             api_key: String::new(),
             model: "deepseek-chat".into(),
             base_url: "https://api.deepseek.com/v1".into(),
+            translate_to: TranslateTo::default(),
         }
     }
 }
@@ -40,6 +89,12 @@ impl Default for DeepseekSettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     pub theme: Theme,
+    /// 旧 settings.json 无此字段 → 默认蓝色,保证兼容加载
+    #[serde(default)]
+    pub accent: Accent,
+    /// 打开技能默认视图,旧配置默认原文
+    #[serde(default)]
+    pub default_view: SkillOpenView,
     pub agent_overrides: HashMap<AgentId, PathBuf>,
     pub deepseek: DeepseekSettings,
 }
@@ -48,6 +103,8 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             theme: Theme::Dark,
+            accent: Accent::default(),
+            default_view: SkillOpenView::default(),
             agent_overrides: HashMap::new(),
             deepseek: DeepseekSettings::default(),
         }
@@ -101,6 +158,9 @@ mod tests {
 
         let loaded = store.load();
         assert_eq!(loaded.theme, Theme::Dark);
+        assert_eq!(loaded.accent, Accent::Blue);
+        assert_eq!(loaded.default_view, SkillOpenView::Original);
+        assert_eq!(loaded.deepseek.translate_to, TranslateTo::Zh);
         assert_eq!(
             loaded.agent_overrides.get(&AgentId::Codex).unwrap().to_string_lossy(),
             "C:/tmp/codex"
@@ -118,6 +178,33 @@ mod tests {
         let store = SettingsStore::new(dir.path().join("nope").to_path_buf());
         let s = store.load();
         assert_eq!(s.theme, Theme::Dark);
+        assert_eq!(s.accent, Accent::Blue);
         assert!(s.agent_overrides.is_empty());
+    }
+
+    #[test]
+    fn legacy_json_without_accent_defaults_blue() {
+        let dir = tempdir().unwrap();
+        let store = SettingsStore::new(dir.path().to_path_buf());
+        std::fs::write(
+            &store.path,
+            r#"{"theme":"light","agent_overrides":{},"deepseek":{"api_key":"","model":"deepseek-chat","base_url":"https://api.deepseek.com/v1"}}"#,
+        )
+        .unwrap();
+        let s = store.load();
+        assert_eq!(s.theme, Theme::Light);
+        assert_eq!(s.accent, Accent::Blue);
+        assert_eq!(s.default_view, SkillOpenView::Original);
+        assert_eq!(s.deepseek.translate_to, TranslateTo::Zh);
+    }
+
+    #[test]
+    fn accent_roundtrip() {
+        let dir = tempdir().unwrap();
+        let store = SettingsStore::new(dir.path().to_path_buf());
+        let mut s = Settings::default();
+        s.accent = Accent::Purple;
+        store.save(&s).unwrap();
+        assert_eq!(store.load().accent, Accent::Purple);
     }
 }

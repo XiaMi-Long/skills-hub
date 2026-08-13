@@ -1,4 +1,5 @@
 import Button from "../ui/Button";
+import Radio from "../ui/Radio";
 import { AGENT_META } from "../lib/agents";
 import type { AgentId, OnConflict } from "../types/api";
 import type { SyncTargetRow } from "./SyncModal";
@@ -49,24 +50,20 @@ export default function ConflictResolver({
             >
               <span className="h-[6px] w-[6px] rounded-full" style={{ background: meta.color }} />
               <span className="flex-1 text-[13px] text-[var(--text-primary)]">{meta.display}</span>
-              <label className="flex cursor-pointer items-center gap-1 text-[12px] text-[var(--text-secondary)]">
-                <input
-                  type="radio"
-                  checked={r.conflict === "overwrite"}
-                  onChange={() => onSet(r.agent, "overwrite")}
-                  className="accent-[#f97316]"
-                />
+              <Radio
+                checked={r.conflict === "overwrite"}
+                onChange={() => onSet(r.agent, "overwrite")}
+                className="text-[12px] text-[var(--text-secondary)]"
+              >
                 覆盖
-              </label>
-              <label className="flex cursor-pointer items-center gap-1 text-[12px] text-[var(--text-secondary)]">
-                <input
-                  type="radio"
-                  checked={r.conflict === "skip"}
-                  onChange={() => onSet(r.agent, "skip")}
-                  className="accent-[#f97316]"
-                />
+              </Radio>
+              <Radio
+                checked={r.conflict === "skip"}
+                onChange={() => onSet(r.agent, "skip")}
+                className="text-[12px] text-[var(--text-secondary)]"
+              >
                 跳过
-              </label>
+              </Radio>
             </div>
           );
         })}

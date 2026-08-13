@@ -13,11 +13,11 @@
 | 1 | 数据模型:纯扫描,无中心主库。扫描各 agent skills 目录,同名归组;同步=递归文件夹复制 |
 | 2 | 8 个 agent 目标(见 §2),含 universal `.agents/skills` |
 | 3 | v1 功能:列表+搜索、详情 Markdown 渲染、raw 编辑、新建、删除、同步(冲突弹窗)、资源管理器打开、漂移圆点提示、focus 自动重扫+手动刷新、暗/亮主题、设置页(路径覆盖+DeepSeek 配置)、翻译阅读 |
-| 4 | 不做(v2 候选):翻译写回、collections/分组、收藏、Discover 在线市场、fs watcher、项目级 skills、i18n 英文版、agent 命令执行/MCP |
+| 4 | 不做(v2 候选):collections/分组、收藏、Discover 在线市场、fs watcher、项目级 skills、i18n 英文版、agent 命令执行/MCP |
 | 5 | 栈:Tauri v2 + Rust;React 19 + TS + Vite + Tailwind v4 + zustand;CodeMirror 6;react-markdown+remark-gfm+rehype-highlight;async-openai |
 | 6 | UI 语言:中文(术语 skill/agent/sync/SKILL.md 保留英文) |
-| 7 | 视觉:现代扁平为底 + 三层质感(磨砂 glass 仅浮层、微妙渐变、颗粒噪点),暗色默认 + 亮色切换 |
-| 8 | 翻译:仅视图层,永远不写回 skill 文件;翻译态禁止编辑;写回功能留空钩子后面做 |
+| 7 | 视觉:现代扁平为底 + 三层质感(磨砂 glass 仅浮层、微妙渐变、颗粒噪点),暗色默认 + 亮色切换;色调默认蓝,设置页可选蓝/橙/绿/紫/粉 |
+| 8 | 翻译:视图层展示 + 内容寻址缓存(相同内容副本共享)+ 打开自动读缓存(stale 提醒)+ 一键翻译全部 + 确认后用译文替换原文;翻译态禁止编辑;目标语言(中/英)/默认视图可设置 |
 | 9 | 平台:Win11 先做;路径全走 `dirs::home_dir()`,mac/linux 理论可跑但不测试不承诺 |
 
 环境:Win11,MSVC VS2019 BuildTools(14.29,已有 C++ 负载),rustup 在 `C:\Users\admin\.cargo\bin`(Git Bash 需 `export PATH="$PATH:/c/Users/admin/.cargo/bin"`)。
@@ -117,6 +117,8 @@ group_key:`name.to_ascii_lowercase().trim()` 后空白换 `-`。"My Skill"=="my-
 ```rust
 pub struct Settings {
     pub theme: Theme,                          // Dark | Light | System,默认 Dark
+    pub accent: Accent,                        // Blue|Orange|Green|Purple|Pink,默认 Blue;#[serde(default)] 兼容旧配置
+    pub default_view: SkillOpenView,           // Original | Translated,默认 Original;打开技能默认显示原文或译文
     pub agent_overrides: HashMap<AgentId, PathBuf>,
     pub deepseek: DeepseekSettings,
 }
@@ -124,6 +126,7 @@ pub struct DeepseekSettings {
     pub api_key: String,                       // 明文存本地,设置页有警示文案
     pub model: String,                         // 默认 "deepseek-chat"
     pub base_url: String,                      // 默认 "https://api.deepseek.com/v1"
+    pub translate_to: TranslateTo,             // Zh | En,默认 Zh
 }
 ```
 
@@ -144,9 +147,13 @@ pub struct DeepseekSettings {
 | `reveal_in_explorer` | `agent_id, skill_name` | `()` | `Command::new("explorer.exe").arg(format!("/select,{}", path))` |
 | `get_settings` / `save_settings` | — / `Settings` | `Settings` / `()` | 首跑生成默认;save 原子写 |
 | `translate_skill` | `agent_id, skill_name` | `{ cached: bool, text: Option<String>, request_id: String }` | 命中缓存直接返回全文;否则 request_id=uuid,异步 spawn 流式请求,经 event 推 chunk(§6) |
+| `check_translation` | `agent_id, skill_name` | `{ status: hit\|stale\|none, text }` | 纯查缓存不发请求;stale 附旧译文供过期横幅展示 |
+| `replace_with_translation` | `agent_id, skill_name, translated_raw, loaded_mtime, force` | `SkillInstance` | 译文写回原文(陈旧检测同 write_skill_md),并登记为新内容缓存 |
+| `translate_all` | — | `{ total }` | 扫描去重后 spawn 批量任务,事件报进度;已在运行报错 |
+| `cancel_translate_all` | — | `()` | 置取消标志,任务在下一条前终止 |
 | `test_deepseek` | — | `{ ok: bool, message: String }` | 发一条 "ping" 非流式请求,返回 ok/错误信息 |
 
-**Events**(Rust `app.emit`,前端 `listen`):`translate-chunk { request_id, delta }`、`translate-done { request_id, text }`(同时写缓存)、`translate-error { request_id, message }`。
+**Events**(Rust `app.emit`,前端 `listen`):`translate-chunk { request_id, delta }`、`translate-done { request_id, text }`(同时写缓存)、`translate-error { request_id, message }`;批量:`translate-all-progress { done, total, current }`、`translate-all-done { translated, skipped, failed, cancelled, errors }`。
 
 ---
 
@@ -188,14 +195,14 @@ stage_then_replace(src, target):
 
 - 客户端:`async_openai::Client::with_config(OpenAIConfig::new().with_api_key(k).with_api_base(base_url))`。
 - 流式:`chat().create_stream(...)`,`futures::StreamExt` 逐 chunk `emit("translate-chunk")`。
-- **Prompt**(常量 `PROMPT_VERSION: u32 = 1`,入缓存 key):
-  system: 「你是技术文档翻译器。把 SKILL.md 翻译成简体中文。规则:代码块、行内代码、文件路径、命令、frontmatter 的 key 保持原样;frontmatter 的 description 值要翻译,name 值保持原样;markdown 结构(标题/列表/表格/链接)保持;只输出翻译后的全文,无解释。」
-  user: raw SKILL.md 全文。
-- **缓存**:key = `DefaultHasher(abs_path + mtime + model + base_url + PROMPT_VERSION)` 的 hex;文件 `app_data_dir/translations/<key>.md`。命中 → `cached:true` 直接返回,不发请求。
-- **纯视图层**:翻译结果永不写 skill 文件。翻译态前端禁 Edit tab。
-- **写回钩子(留空)**:`llm.rs` 底部留 `// TODO(v2): write_back_translation —— 让 LLM 把译文/修改同步回 SKILL.md`,不实现。
-- 扩展预留:目录级 `services/` 不放东西;v2 agent 命令执行用 `std::process::Command` 自包,MCP 再评 `rmcp`。v1 不引框架。
+- **Prompt**(`PROMPT_VERSION: u32 = 2`,入缓存 key):目标语言由 `Settings.deepseek.translate_to`(zh/en)决定,zh 用简体中文提示词,en 用英文提示词;均要求保留代码块/行内代码/路径/命令/frontmatter key,name 值不变、description 值翻译,输出含 frontmatter 的完整全文,无解释。
+- **内容寻址缓存**:key = `DefaultHasher(内容字节 + 目标语言 + model + base_url + PROMPT_VERSION)` 的 hex;文件 `app_data_dir/translations/<key>.md`。**相同内容的多 agent 副本共享一份翻译**。
+- **清单**:`translations/index.json` 记录 `abs_path → { content_hash, key, translated_at }`,读写走全局 Mutex。`check_translation` 纯查:当前内容 key 命中 → `hit`;清单里有旧哈希但内容已变 → `stale`(附旧译文,供"过期"横幅展示);否则 `none`。
+- **打开即读缓存**:前端切换技能后调 `check_translation`;设置 `default_view=translated` 时命中直接显示译文,stale 显示旧译文+「原文已更新」横幅,none 显示「立即翻译」空态;原文视图下 stale 在翻译按钮旁显示「翻译已过期」徽标。绝不静默重译(费用可控)。
+- **一键翻译全部**:`translate_all` 扫描全部实例按内容去重,顺序非流式翻译,progress/done 事件上报,`cancel_translate_all` 可取消;相同内容副本同时登记清单。
+- **写回**:`replace_with_translation` 用译文覆盖 SKILL.md 原文(带 mtime 陈旧检测,force 二次确认),并把译文登记为新内容的缓存(下次打开命中)。前端仅译文视图下可写回(stale/流式中禁用),确认弹窗警示原文丢失。
 - API key 未配置 → 前端翻译按钮禁用 + 提示「在设置中配置 DeepSeek API」。
+- 扩展预留:目录级 `services/` 不放东西;v2 agent 命令执行用 `std::process::Command` 自包,MCP 再评 `rmcp`。v1 不引框架。
 
 ---
 
@@ -211,6 +218,8 @@ src/
 ├── modals/ SyncModal.tsx ConflictResolver.tsx SyncResultSummary.tsx NewSkillModal.tsx DeleteDialog.tsx
 ├── settings/ SettingsPage.tsx
 ├── ui/     Button Input Chip Modal Toast(Sonner 或自写,自写优先少依赖)
+│           + Checkbox/Radio/Select 自定义控件:勾选为 accent 渐变底+白色对勾、单选框为渐变环+内点、
+│             下拉为玻璃浮层;Input/Button 聚焦 accent 光晕+按压缩放;Modal/Toast 入场轻动效,尊重 prefers-reduced-motion
 ├── editor/ cm-setup.ts          # codemirror meta 包 + @codemirror/lang-markdown,
 │                                # EditorView.theme 读 CSS var,无独立主题文件
 ├── md/     Markdown.tsx         # react-markdown + remark-gfm + rehype-highlight
@@ -231,12 +240,14 @@ src/
 **关键交互规格**:
 - SkillRow:name + 各实例 AgentBadge;drift=true 行右侧 6px 橙色圆点(tooltip「副本内容不一致」)。
 - InstanceSelector:详情头排 badges,点击切换查看哪个副本;默认选 AGENTS 顺序第一个 has_skill_md 实例。
-- ViewPane:meta chips(scope=global、辅助文件数、绝对路径 mono 字体、badges)+ 渲染 markdown;工具条:翻译/查看原文 切换、同步到…、打开目录、删除。翻译态:顶部 chip「已翻译 · deepseek-chat」,Edit tab 置灰 tooltip「翻译视图只读,切回原文可编辑」。翻译流式:chunk 累积节流 100ms 重渲 Markdown。
+- ViewPane:meta chips(scope=global、辅助文件数、绝对路径 mono 字体、badges)+ 渲染 markdown;工具条:翻译/查看原文 切换、同步到…、打开目录、删除。翻译态:顶部 chip「已翻译 · deepseek-chat」,Edit tab 置灰 tooltip「翻译视图只读,切回原文可编辑」。翻译流式:chunk 累积节流 100ms 重渲 Markdown。打开技能按 `default_view` 自动读缓存进入译文;stale 显示旧译文 + 「原文已更新」横幅 + 重新翻译按钮,原文视图翻译按钮旁「翻译已过期」徽标;译文完整时提供「用译文替换原文」(ConfirmDialog 警示,force 处理 FileChangedOnDisk)。
 - EditPane:CodeMirror;Cancel 丢弃;Save 调 write_skill_md;FileChangedOnDisk → 确认弹窗「文件在磁盘上已被外部修改,仍要覆盖?」。
 - SyncModal:源 badge 固定;8 target checkbox,默认勾选「无副本」者,「有副本」者不勾但带橙色「已存在」chip;下一步若有勾选已存在者 → ConflictResolver:逐行 覆盖/跳过 radio + 「应用到全部」;执行后 SyncResultSummary 逐 target ✓/✗+错误文案。
 - NewSkillModal:名字输入 + 描述 + body textarea(预填模板)+ targets 复选。名字校验 `^[a-z0-9]+(-[a-z0-9]+)*$`,不符红字提示;与某 target 已有同名 → 内联警告列出,出现「覆盖已有」checkbox 才可提交。
 - DeleteDialog:radio「仅此副本 / 所有副本(N)」+ 红色确认按钮,二次输入名字?不,普通确认即可。
-- SettingsPage 分区:主题(暗/亮/跟随系统 radio);Agent 路径(8 行:display + 路径 input + 浏览按钮(dialog plugin)+ 重置默认);DeepSeek(API key password input + model select[deepseek-chat, deepseek-reasoner, 自定义输入] + base_url input + 「连接测试」按钮调 test_deepseek + 警示文案「key 仅存本机 app 数据目录,明文」);重新扫描按钮;版本 footer。
+- SettingsPage 分区:主题(暗/亮/跟随系统 radio);色调(蓝/橙/绿/紫/粉 swatch,默认蓝,即选即预览,`applyAccent` 写 `--accent-from/--accent-to` 内联样式到 `<html>`);Agent 路径(8 行:display + 路径 input + 浏览按钮(dialog plugin)+ 重置默认);DeepSeek(API key password input + model select[deepseek-chat, deepseek-reasoner, 自定义输入] + base_url input + 目标语言 radio[中文/英文] + 默认视图 radio[原文/译文] + 「连接测试」按钮调 test_deepseek + 警示文案「key 仅存本机 app 数据目录,明文」);一键翻译全部(进度条 + 取消,事件驱动,无 key 禁用 + 额度警示);重新扫描按钮;版本 footer。
+
+**Modal 挂载**:所有 Modal 经 `createPortal` 挂到 `document.body`(挂载点祖先的 backdrop-filter/transform 会劫持 fixed 定位与层叠上下文)。警示语义(漂移点/冲突/未保存)固定用 `--warning` token,不随色调变化。
 
 **UI 文案全中文**,术语保留:skill、agent、SKILL.md、sync 场景用「同步」。示例:搜索框 placeholder「搜索技能…」、空态「选择一个技能查看详情」、按钮「新建技能 / 保存 / 取消 / 同步到… / 删除 / 打开目录 / 翻译 / 查看原文 / 重新扫描 / 连接测试」。
 
@@ -257,8 +268,8 @@ src/
 | --border-subtle | rgba(255,255,255,0.08) | rgba(0,0,0,0.06) |
 | --border-strong | rgba(255,255,255,0.16) | rgba(0,0,0,0.14) |
 | --text-primary / secondary / muted | #ededed / #a1a1aa / #6b7280 | #18181b / #52525b / #a1a1aa |
-| --accent-from / -to | #f97316 / #f59e0b | 同 |
-| --danger / --success | #ef4444 / #22c55e | 同 |
+| --accent-from / -to | #2563eb / #3b82f6(默认蓝,设置页可调) | 同 |
+| --warning / --danger / --success | #f59e0b / #ef4444 / #22c55e | 同 |
 
 圆角:控件 8px、卡片/modal 10px。无重阴影;浮层仅 `0 1px 2px rgba(0,0,0,0.4)`。
 

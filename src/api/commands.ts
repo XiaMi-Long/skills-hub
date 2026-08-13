@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  CheckTranslationResult,
   DeleteScope,
   ReadSkillResult,
   ScanResult,
@@ -7,6 +8,7 @@ import type {
   SkillInstance,
   SyncDirective,
   TestDeepseekResult,
+  TranslateAllStart,
   TranslateResult,
 } from "../types/api";
 import type { AgentId } from "../types/api";
@@ -70,5 +72,27 @@ export const saveSettings = (settings: Settings) =>
 
 export const translateSkill = (agentId: AgentId, skillName: string) =>
   invoke<TranslateResult>("translate_skill", { agentId, skillName });
+
+export const checkTranslation = (agentId: AgentId, skillName: string) =>
+  invoke<CheckTranslationResult>("check_translation", { agentId, skillName });
+
+export const replaceWithTranslation = (
+  agentId: AgentId,
+  skillName: string,
+  translatedRaw: string,
+  loadedMtime: number,
+  force = false,
+) =>
+  invoke<SkillInstance>("replace_with_translation", {
+    agentId,
+    skillName,
+    translatedRaw,
+    loadedMtime,
+    force,
+  });
+
+export const translateAll = () => invoke<TranslateAllStart>("translate_all");
+
+export const cancelTranslateAll = () => invoke<void>("cancel_translate_all");
 
 export const testDeepseek = () => invoke<TestDeepseekResult>("test_deepseek");

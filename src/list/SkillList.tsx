@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
+import Input from "../ui/Input";
 import { useSkillsStore } from "../store/skills";
 import SkillRow from "./SkillRow";
 import type { AgentId } from "../types/api";
@@ -45,13 +46,27 @@ export default function SkillList() {
     <div className="flex h-full flex-col bg-[var(--bg-pane)]">
       {/* 搜索框 */}
       <div className="px-3 pt-3 pb-2">
-        <input
-          ref={searchRef}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="搜索技能…"
-          className="h-8 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] focus:outline-none"
-        />
+        <div className="relative">
+          <svg
+            className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
+          <Input
+            ref={searchRef}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="搜索技能…"
+            className="pl-8"
+          />
+        </div>
       </div>
 
       {/* 列表 */}

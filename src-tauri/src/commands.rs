@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::fs;
 use std::process::Command;
+use std::sync::atomic::Ordering;
 use std::time::UNIX_EPOCH;
 
 use serde::Serialize;
@@ -19,6 +21,15 @@ fn store(app: &AppHandle) -> SettingsStore {
         .app_data_dir()
         .unwrap_or_else(|_| std::path::PathBuf::from("."));
     SettingsStore::new(dir)
+}
+
+/// 读取磁盘后重建 instance(写回类命令用)。
+fn rebuild_instance(agent_id: AgentId, abs_path: std::path::PathBuf, fallback: &str) -> SkillInstance {
+    let dirname = abs_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| fallback.to_string());
+    build_instance(agent_id, abs_path, dirname)
 }
 
 /// 用 serde_yaml 输出安全的 YAML 标量(引号/转义)。
@@ -60,6 +71,17 @@ pub struct TranslateResult {
     pub cached: bool,
     pub text: Option<String>,
     pub request_id: String,
+}
+
+#[derive(Serialize)]
+pub struct CheckTranslationResult {
+    pub status: String,
+    pub text: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct TranslateAllStart {
+    pub total: u32,
 }
 
 // ---- 扫描 ----
@@ -130,12 +152,7 @@ pub fn write_skill_md(
 
     fs::write(&skill_md, raw.as_bytes()).map_err(|e| AppError::Io(e))?;
 
-    let dirname = instance
-        .abs_path
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| skill_name.clone());
-    Ok(build_instance(agent_id, instance.abs_path, dirname))
+    Ok(rebuild_instance(agent_id, instance.abs_path, &skill_name))
 }
 
 // ---- 新建 ----
@@ -283,6 +300,31 @@ pub fn save_settings(app: AppHandle, settings: Settings) -> AppResult<()> {
 
 // ---- 翻译 ----
 
+/// 纯查缓存:hit=当前内容有译文;stale=文件已变,返回旧译文;none=从未翻译。
+#[tauri::command]
+pub fn check_translation(
+    app: AppHandle,
+    agent_id: AgentId,
+    skill_name: String,
+) -> AppResult<CheckTranslationResult> {
+    let settings = store(&app).load();
+    let instance = find_agent_instance(&settings, agent_id, &skill_name)
+        .ok_or_else(|| AppError::NotFound(format!("{} / {}", agent_id.display(), skill_name)))?;
+    let skill_md = instance.abs_path.join("SKILL.md");
+    if !skill_md.exists() {
+        return Err(AppError::NotFound(format!(
+            "{} / {} 没有 SKILL.md",
+            agent_id.display(),
+            skill_name
+        )));
+    }
+    let (status, text) = llm::check_translation(&app, &settings.deepseek, &skill_md)?;
+    Ok(CheckTranslationResult {
+        status: status.as_str().into(),
+        text,
+    })
+}
+
 #[tauri::command]
 pub async fn translate_skill(
     app: AppHandle,
@@ -304,16 +346,11 @@ pub async fn translate_skill(
             skill_name
         )));
     }
-    let mtime = fs::metadata(&skill_md)
-        .and_then(|m| m.modified())
-        .ok()
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
 
-    let key = llm::translate_cache_key(&skill_md, mtime, &ds.model, &ds.base_url);
-
-    if let Some(text) = llm::read_cache(&app, &key) {
+    // 命中缓存直接返回;过期/无缓存 → 流式重译
+    if let (llm::TranslationStatus::Hit, Some(text)) =
+        llm::check_translation(&app, &ds, &skill_md)?
+    {
         return Ok(TranslateResult {
             cached: true,
             text: Some(text),
@@ -323,10 +360,9 @@ pub async fn translate_skill(
 
     let request_id = uuid::Uuid::new_v4().to_string();
     let app2 = app.clone();
-    let abs_path = instance.abs_path.join("SKILL.md");
     let rid = request_id.clone();
     tauri::async_runtime::spawn(async move {
-        llm::stream_translation_task(app2, rid, abs_path, mtime, ds).await;
+        llm::stream_translation_task(app2, rid, skill_md, ds).await;
     });
 
     Ok(TranslateResult {
@@ -334,6 +370,102 @@ pub async fn translate_skill(
         text: None,
         request_id,
     })
+}
+
+/// 用译文替换原文:写回 SKILL.md(带陈旧检测),并把译文登记为当前内容的缓存。
+#[tauri::command]
+pub fn replace_with_translation(
+    app: AppHandle,
+    agent_id: AgentId,
+    skill_name: String,
+    translated_raw: String,
+    loaded_mtime: i64,
+    force: bool,
+) -> AppResult<SkillInstance> {
+    let settings = store(&app).load();
+    let instance = find_agent_instance(&settings, agent_id, &skill_name)
+        .ok_or_else(|| AppError::NotFound(format!("{} / {}", agent_id.display(), skill_name)))?;
+    let skill_md = instance.abs_path.join("SKILL.md");
+
+    if !force {
+        let disk_mtime = fs::metadata(&skill_md)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        if disk_mtime != loaded_mtime {
+            return Err(AppError::FileChangedOnDisk);
+        }
+    }
+
+    fs::write(&skill_md, translated_raw.as_bytes()).map_err(|e| AppError::Io(e))?;
+    // 新内容 = 译文本身,登记后下次打开直接命中缓存
+    llm::register_translation(
+        &app,
+        &settings.deepseek,
+        &skill_md,
+        translated_raw.as_bytes(),
+        &translated_raw,
+    );
+
+    Ok(rebuild_instance(agent_id, instance.abs_path, &skill_name))
+}
+
+/// 一键翻译全部(去重后顺序执行,事件上报进度,可取消)。
+#[tauri::command]
+pub async fn translate_all(app: AppHandle) -> AppResult<TranslateAllStart> {
+    let state = app.state::<llm::TranslateState>();
+    if state.batch_running.swap(true, Ordering::SeqCst) {
+        return Err(AppError::Llm("批量翻译已在运行".into()));
+    }
+    state.batch_cancel.store(false, Ordering::SeqCst);
+
+    let settings = store(&app).load();
+    let ds: DeepseekSettings = settings.deepseek.clone();
+    if ds.api_key.trim().is_empty() {
+        state.batch_running.store(false, Ordering::SeqCst);
+        return Err(AppError::Llm("未配置 DeepSeek API Key,请在设置中配置".into()));
+    }
+
+    // 扫描全部实例,按内容去重(相同内容只翻译一次,副本共享缓存)
+    let scan = crate::scanner::scan_all(&settings);
+    let mut map: HashMap<String, llm::BatchItem> = HashMap::new();
+    for g in &scan.groups {
+        for inst in &g.instances {
+            if !inst.has_skill_md {
+                continue;
+            }
+            let path = inst.abs_path.join("SKILL.md");
+            let Ok(bytes) = fs::read(&path) else { continue };
+            let h = llm::content_hash(&bytes);
+            let entry = map.entry(h).or_insert_with(|| llm::BatchItem {
+                name: g.name.clone(),
+                paths: Vec::new(),
+                raw: bytes.clone(),
+            });
+            entry.paths.push(path);
+        }
+    }
+    let items: Vec<llm::BatchItem> = map.into_values().collect();
+    let total = items.len() as u32;
+    if total == 0 {
+        state.batch_running.store(false, Ordering::SeqCst);
+        return Err(AppError::NotFound("没有找到可翻译的 SKILL.md".into()));
+    }
+
+    tauri::async_runtime::spawn(async move {
+        llm::translate_all_task(app.clone(), ds, items).await;
+    });
+    Ok(TranslateAllStart { total })
+}
+
+#[tauri::command]
+pub fn cancel_translate_all(app: AppHandle) -> AppResult<()> {
+    app.state::<llm::TranslateState>()
+        .batch_cancel
+        .store(true, Ordering::SeqCst);
+    Ok(())
 }
 
 #[tauri::command]

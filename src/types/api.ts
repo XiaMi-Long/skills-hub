@@ -54,14 +54,26 @@ export interface SyncDirective {
 
 export type Theme = "dark" | "light" | "system";
 
+/** 系统色调(settings.accent,Rust Accent 枚举镜像) */
+export type Accent = "blue" | "orange" | "green" | "purple" | "pink";
+
+/** 翻译目标语言 */
+export type TranslateTo = "zh" | "en";
+
+/** 打开技能时的默认视图 */
+export type SkillOpenView = "original" | "translated";
+
 export interface DeepseekSettings {
   api_key: string;
   model: string;
   base_url: string;
+  translate_to: TranslateTo;
 }
 
 export interface Settings {
   theme: Theme;
+  accent: Accent;
+  default_view: SkillOpenView;
   agent_overrides: Record<string, string>;
   deepseek: DeepseekSettings;
 }
@@ -70,6 +82,16 @@ export interface TranslateResult {
   cached: boolean;
   text: string | null;
   request_id: string;
+}
+
+/** 翻译缓存检查:hit=有缓存;stale=文件已变(附旧译文);none=从未翻译 */
+export interface CheckTranslationResult {
+  status: "hit" | "stale" | "none";
+  text: string | null;
+}
+
+export interface TranslateAllStart {
+  total: number;
 }
 
 export interface TestDeepseekResult {
@@ -92,6 +114,24 @@ export interface TranslateDoneEvent {
 export interface TranslateErrorEvent {
   request_id: string;
   message: string;
+}
+
+/** 批量翻译事件 */
+export interface TranslateAllProgressEvent {
+  done: number;
+  total: number;
+  current: string;
+}
+export interface BatchErrorItem {
+  name: string;
+  message: string;
+}
+export interface TranslateAllDoneEvent {
+  translated: number;
+  skipped: number;
+  failed: number;
+  cancelled: boolean;
+  errors: BatchErrorItem[];
 }
 
 /** invoke 错误形态(Rust AppError 序列化) */
