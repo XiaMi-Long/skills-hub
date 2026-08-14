@@ -63,6 +63,9 @@ export type TranslateTo = "zh" | "en";
 /** 打开技能时的默认视图 */
 export type SkillOpenView = "original" | "translated";
 
+/** 技能预览 Markdown 排版主题 */
+export type MarkdownTheme = "default" | "docs" | "paper" | "compact";
+
 export interface DeepseekSettings {
   api_key: string;
   model: string;
@@ -74,6 +77,7 @@ export interface Settings {
   theme: Theme;
   accent: Accent;
   default_view: SkillOpenView;
+  markdown_theme: MarkdownTheme;
   agent_overrides: Record<string, string>;
   deepseek: DeepseekSettings;
 }
@@ -92,6 +96,20 @@ export interface CheckTranslationResult {
 
 export interface TranslateAllStart {
   total: number;
+}
+
+/** 批量替换预检:total = 有 SKILL.md 的副本总数,replaceable = 当前内容命中译文缓存的副本数 */
+export interface CountReplaceableResult {
+  total: number;
+  replaceable: number;
+}
+
+/** 批量替换结果:skipped = 未翻译或译文过期被跳过的副本数 */
+export interface ReplaceAllResult {
+  replaced: number;
+  skipped: number;
+  failed: number;
+  errors: BatchErrorItem[];
 }
 
 export interface TestDeepseekResult {

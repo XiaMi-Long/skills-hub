@@ -2,13 +2,16 @@ import type { ButtonHTMLAttributes } from "react";
 
 type Variant = "primary" | "ghost" | "danger";
 
+/**
+ * @description 按钮系统(统一控件):primary=纵向渐变+内高光主操作,ghost=描边次级,danger=危险。
+ * 统一高度 30px、圆角 9px、按压微缩;禁用态降透明度。
+ */
 const VARIANTS: Record<Variant, string> = {
-  primary:
-    "accent-gradient text-black/85 border border-transparent hover:brightness-110 font-medium shadow-[0_0_12px_color-mix(in_srgb,var(--accent-from)_25%,transparent)]",
+  primary: "btn-primary text-white",
   ghost:
-    "border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]",
+    "border border-[var(--border-subtle)] bg-transparent text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]",
   danger:
-    "border border-[var(--danger)]/40 text-[var(--danger)] hover:bg-[var(--danger)]/10",
+    "border border-[var(--danger)]/25 bg-transparent text-[var(--danger)] hover:border-[var(--danger)]/50 hover:bg-[var(--danger)]/10",
 };
 
 export default function Button({
@@ -19,7 +22,7 @@ export default function Button({
   return (
     <button
       {...props}
-      className={`rounded-lg px-3 py-1.5 text-[12px] transition-[background-color,border-color,transform,filter,color] duration-150 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 ${VARIANTS[variant]} ${className}`}
+      className={`inline-flex h-[30px] items-center justify-center gap-1.5 rounded-[9px] px-3.5 text-[12px] font-medium transition-all duration-150 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-45 ${VARIANTS[variant]} ${className}`}
     />
   );
 }

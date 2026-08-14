@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import AppShell from "./shell/AppShell";
 import GrainOverlay from "./shell/GrainOverlay";
 import ToastHost from "./ui/Toast";
-import SettingsPage from "./settings/SettingsPage";
 import { applyTheme, useAppStore } from "./store/app";
 import { useSkillsStore } from "./store/skills";
 import { useSettingsStore } from "./store/settings";
@@ -19,7 +18,6 @@ import type {
 
 export default function App() {
   const resolvedTheme = useAppStore((s) => s.resolvedTheme);
-  const route = useAppStore((s) => s.route);
   const refresh = useSkillsStore((s) => s.refresh);
   const loadSettings = useSettingsStore((s) => s.load);
 
@@ -119,7 +117,7 @@ export default function App() {
 
   return (
     <>
-      {route === "settings" ? <SettingsPage onBack={() => useAppStore.getState().setRoute("main")} /> : <AppShell />}
+      <AppShell />
       <GrainOverlay />
       <ToastHost />
     </>

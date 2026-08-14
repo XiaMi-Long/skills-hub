@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b82f6"/>
+      <stop offset="1" stop-color="#1d4ed8"/>
+    </linearGradient>
+  </defs>
+  <!-- 圆角底片(accent 渐变) -->
+  <rect x="32" y="32" width="448" height="448" rx="104" fill="url(#g)"/>
+  <rect x="32" y="32" width="448" height="448" rx="104" fill="none" stroke="#ffffff" stroke-opacity="0.16" stroke-width="6"/>
+  <!-- 几何 S:三段堆叠横条(也隐喻技能卡堆) -->
+  <g stroke="#ffffff" stroke-width="56" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M150 150 H322 V214 H190 V298 H362"/>
+  </g>
+</svg>

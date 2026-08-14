@@ -1,336 +1,150 @@
-import { useEffect, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
-import { AGENT_META, AGENT_ORDER } from "../lib/agents";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { ACCENTS } from "../lib/accents";
-import { cancelTranslateAll, testDeepseek, translateAll } from "../api/commands";
-import { useSettingsStore } from "../store/settings";
-import { useSkillsStore } from "../store/skills";
 import { useAppStore } from "../store/app";
-import { useTranslateStore } from "../store/translate";
+import { useSettingsStore } from "../store/settings";
 import { toast } from "../store/toast";
-import Button from "../ui/Button";
-import Input from "../ui/Input";
-import Radio from "../ui/Radio";
-import Select from "../ui/Select";
-import type { AgentId, Settings, SkillOpenView, Theme, TranslateTo } from "../types/api";
+import { CATEGORY_LABELS, type SettingsCategory } from "./categories";
+import SettingsNav from "./SettingsNav";
+import AgentsPanel from "./panels/AgentsPanel";
+import AppearancePanel from "./panels/AppearancePanel";
+import BulkOpsPanel from "./panels/BulkOpsPanel";
+import TranslatePanel from "./panels/TranslatePanel";
+import type { Settings } from "../types/api";
 
-const MODELS = ["deepseek-chat", "deepseek-reasoner"];
+type SaveStatus = "idle" | "saving" | "saved";
 
-export default function SettingsPage({ onBack }: { onBack: () => void }) {
+/** 统一缓出曲线(与全局动效一致) */
+const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
+/**
+ * @description 设置页(外壳内内容视图):左侧分类导航 + 右侧内容面板。
+ * 特性:主题互动背景(accent 渐变打底 + 双角光晕,随主题/色调切换)、防抖自动保存、
+ * 首屏轻量入场、分类切换交错动效。顶部系统 header(TopToolbar)与 IconRail 由外壳提供。
+ */
+export default function SettingsPage() {
   const stored = useSettingsStore((s) => s.settings);
   const saveSettings = useSettingsStore((s) => s.save);
-  const refresh = useSkillsStore((s) => s.refresh);
-  const setTheme = useAppStore((s) => s.setTheme);
-  const setAccent = useAppStore((s) => s.setAccent);
-  const batch = useTranslateStore((s) => s.batch);
+  const resolvedTheme = useAppStore((s) => s.resolvedTheme);
 
   const [draft, setDraft] = useState<Settings | null>(stored);
-  const [testing, setTesting] = useState(false);
-  const [customModel, setCustomModel] = useState(false);
+  const [active, setActive] = useState<SettingsCategory>("appearance");
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  // 跳过水合后的首次自动保存(避免刚加载就把原样设置写回)
+  const skipNextSave = useRef(true);
 
+  // store 变化 → 水合草稿(自动保存写回的是同一引用,React 会跳过重复 setState)
   useEffect(() => {
     if (stored) setDraft(stored);
   }, [stored]);
 
+  // 自动保存:草稿变化防抖 600ms 持久化
+  useEffect(() => {
+    if (!draft) return;
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      return;
+    }
+    setSaveStatus("saving");
+    const t = setTimeout(() => {
+      saveSettings(draft)
+        .then(() => setSaveStatus("saved"))
+        .catch((e) => {
+          setSaveStatus("idle");
+          toast.error(`保存失败: ${(e as { message?: string })?.message ?? e}`);
+        });
+    }, 600);
+    return () => clearTimeout(t);
+  }, [draft, saveSettings]);
+
+  // 互动背景的色调来源(accent)与明暗(主题)
+  const accentDef = useMemo(
+    () => ACCENTS.find((a) => a.id === (draft?.accent ?? "blue")) ?? ACCENTS[0],
+    [draft?.accent],
+  );
+  const dark = resolvedTheme === "dark";
+
   if (!draft) {
     return (
-      <div className="flex h-full items-center justify-center bg-[var(--bg-pane)]">
+      <div className="flex h-full flex-1 items-center justify-center bg-[var(--bg-pane)]">
         <span className="text-[13px] text-[var(--text-muted)]">加载设置…</span>
       </div>
     );
   }
 
-  const setTheme2 = (t: Theme) => {
-    setDraft({ ...draft, theme: t });
-    setTheme(t);
-  };
-
-  const setOverride = (a: AgentId, p: string) => {
-    const overrides = { ...draft.agent_overrides };
-    if (p.trim()) overrides[a] = p.trim();
-    else delete overrides[a];
-    setDraft({ ...draft, agent_overrides: overrides });
-  };
-
-  const resetOverride = (a: AgentId) => {
-    const overrides = { ...draft.agent_overrides };
-    delete overrides[a];
-    setDraft({ ...draft, agent_overrides: overrides });
-  };
-
-  const browse = async (a: AgentId) => {
-    const dir = await open({ directory: true, title: `选择 ${AGENT_META[a].display} skills 目录` });
-    if (typeof dir === "string") setOverride(a, dir);
-  };
-
-  const saveAll = async () => {
-    try {
-      await saveSettings(draft);
-      toast.success("设置已保存");
-    } catch (e) {
-      toast.error(`保存失败: ${(e as { message?: string })?.message ?? e}`);
-    }
-  };
-
-  const test = async () => {
-    setTesting(true);
-    try {
-      await saveSettings(draft);
-      const r = await testDeepseek();
-      if (r.ok) toast.success(r.message);
-      else toast.error(r.message);
-    } catch (e) {
-      toast.error(`连接测试失败: ${(e as { message?: string })?.message ?? e}`);
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  const startBatch = async () => {
-    try {
-      const r = await translateAll();
-      useTranslateStore.getState().batchStart(r.total);
-      toast.info(`已开始批量翻译 ${r.total} 个技能(内容去重后),可在下方查看进度`);
-    } catch (e) {
-      toast.error(`启动失败: ${(e as { message?: string })?.message ?? e}`);
-    }
-  };
-
-  const cancelBatch = () => {
-    cancelTranslateAll().catch(() => {});
-  };
-
   return (
-    <div className="h-full overflow-y-auto bg-[var(--bg-pane)]">
-      <div className="mx-auto max-w-[720px] px-6 py-5">
-        <div className="mb-4 flex items-center gap-3">
-          <Button onClick={onBack}>← 返回</Button>
-          <h1 className="text-[16px] font-semibold text-[var(--text-primary)]">设置</h1>
-        </div>
+    <MotionConfig reducedMotion="user">
+      <motion.div
+        className="flex min-w-0 flex-1"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3, ease: EASE }}
+      >
+        <SettingsNav active={active} onSelect={setActive} />
 
-        {/* 主题 */}
-        <section className="mb-5 rounded-[10px] border border-[var(--border-subtle)] p-4">
-          <h2 className="mb-3 text-[13px] font-semibold text-[var(--text-primary)]">主题</h2>
-          <div className="flex gap-5">
-            {(["dark", "light", "system"] as Theme[]).map((t) => (
-              <Radio
-                key={t}
-                checked={draft.theme === t}
-                onChange={() => setTheme2(t)}
-                className="text-[13px] text-[var(--text-secondary)]"
+        {/* 右侧内容区:互动背景 = accent 渐变打底 + 右上/左下双角光晕,随主题/色调变化 */}
+        <div
+          className="relative flex min-w-0 flex-1 flex-col"
+          style={{
+            background: `radial-gradient(620px 420px at 100% -10%, color-mix(in srgb, ${accentDef.from} ${dark ? 30 : 22}%, transparent), transparent 62%),
+              radial-gradient(480px 320px at 0% 110%, color-mix(in srgb, ${accentDef.to} ${dark ? 16 : 11}%, transparent), transparent 60%),
+              linear-gradient(165deg, var(--settings-bg-base) 0%, var(--settings-bg-base) 45%, color-mix(in srgb, ${accentDef.to} 13%, var(--settings-bg-base)) 100%)`,
+          }}
+        >
+          {/* 面板顶部:当前分类标题 + 自动保存状态 */}
+          <header className="relative z-10 flex shrink-0 items-center justify-between px-6 pt-5 pb-3">
+            <h1 className="text-[17px] font-semibold tracking-tight text-[var(--text-primary)]">
+              {CATEGORY_LABELS[active]}
+            </h1>
+            <SaveStatusPill status={saveStatus} />
+          </header>
+
+          {/* 面板内容:切换时交错淡入 */}
+          <div className="relative z-10 min-h-0 flex-1 overflow-y-auto px-6 pb-8">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={active}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.22, ease: EASE }}
+                className="mx-auto max-w-[680px]"
               >
-                {t === "dark" ? "暗色" : t === "light" ? "亮色" : "跟随系统"}
-              </Radio>
-            ))}
-          </div>
-        </section>
-
-        {/* 色调 */}
-        <section className="mb-5 rounded-[10px] border border-[var(--border-subtle)] p-4">
-          <h2 className="mb-3 text-[13px] font-semibold text-[var(--text-primary)]">色调</h2>
-          <div className="flex flex-wrap gap-2">
-            {ACCENTS.map((a) => {
-              const active = draft.accent === a.id;
-              return (
-                <button
-                  key={a.id}
-                  onClick={() => {
-                    setDraft({ ...draft, accent: a.id });
-                    setAccent(a.id);
-                  }}
-                  className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[12px] transition-colors ${
-                    active
-                      ? "border-[var(--border-strong)] bg-[var(--bg-elevated)] text-[var(--text-primary)]"
-                      : "border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]/50"
-                  }`}
-                >
-                  <span
-                    className="h-4 w-4 rounded-full"
-                    style={{ background: `linear-gradient(90deg, ${a.from}, ${a.to})` }}
-                  />
-                  {a.label}
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Agent 路径 */}
-        <section className="mb-5 rounded-[10px] border border-[var(--border-subtle)] p-4">
-          <h2 className="mb-3 text-[13px] font-semibold text-[var(--text-primary)]">
-            Agent 路径覆盖
-          </h2>
-          <div className="space-y-2">
-            {AGENT_ORDER.map((a) => {
-              const meta = AGENT_META[a];
-              const overridden = draft.agent_overrides[a];
-              return (
-                <div key={a} className="flex items-center gap-2">
-                  <span className="flex w-[110px] shrink-0 items-center gap-1.5 text-[12px] text-[var(--text-secondary)]">
-                    <span className="h-[6px] w-[6px] rounded-full" style={{ background: meta.color }} />
-                    {meta.display}
-                  </span>
-                  <div className="relative min-w-0 flex-1">
-                    <Input
-                      value={overridden ?? ""}
-                      onChange={(e) => setOverride(a, e.target.value)}
-                      placeholder={`默认: ~/${meta.defaultSubpath}`}
-                      className="pr-24"
-                    />
-                    {!overridden && (
-                      <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[10px] text-[var(--text-muted)]">
-                        默认路径
-                      </span>
-                    )}
-                  </div>
-                  <Button onClick={() => browse(a)}>浏览…</Button>
-                  <Button onClick={() => resetOverride(a)} disabled={!overridden}>
-                    重置
-                  </Button>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* DeepSeek */}
-        <section className="mb-5 rounded-[10px] border border-[var(--border-subtle)] p-4">
-          <h2 className="mb-3 text-[13px] font-semibold text-[var(--text-primary)]">DeepSeek 翻译</h2>
-          <div className="space-y-3">
-            <div>
-              <label className="mb-1 block text-[12px] text-[var(--text-secondary)]">API Key</label>
-              <Input
-                type="password"
-                value={draft.deepseek.api_key}
-                onChange={(e) => setDraft({ ...draft, deepseek: { ...draft.deepseek, api_key: e.target.value } })}
-                placeholder="sk-…"
-              />
-              <p className="mt-1 text-[11px] text-[var(--warning)]">
-                ⚠ key 仅存本机 app 数据目录(明文),不会上传任何其他位置
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1 block text-[12px] text-[var(--text-secondary)]">模型</label>
-                <Select
-                  value={customModel ? "custom" : draft.deepseek.model}
-                  onChange={(v) => {
-                    if (v === "custom") setCustomModel(true);
-                    else {
-                      setCustomModel(false);
-                      setDraft({ ...draft, deepseek: { ...draft.deepseek, model: v } });
-                    }
-                  }}
-                  options={[...MODELS.map((m) => ({ value: m, label: m })), { value: "custom", label: "自定义…" }]}
-                />
-                {customModel && (
-                  <Input
-                    className="mt-1.5"
-                    value={draft.deepseek.model}
-                    onChange={(e) => setDraft({ ...draft, deepseek: { ...draft.deepseek, model: e.target.value } })}
-                    placeholder="模型名"
-                  />
+                {active === "appearance" && <AppearancePanel draft={draft} onChange={setDraft} />}
+                {active === "agents" && <AgentsPanel draft={draft} onChange={setDraft} />}
+                {active === "translate" && (
+                  <TranslatePanel draft={draft} onChange={setDraft} persist={saveSettings} />
                 )}
-              </div>
-              <div>
-                <label className="mb-1 block text-[12px] text-[var(--text-secondary)]">Base URL</label>
-                <Input
-                  value={draft.deepseek.base_url}
-                  onChange={(e) => setDraft({ ...draft, deepseek: { ...draft.deepseek, base_url: e.target.value } })}
-                  placeholder="https://api.deepseek.com/v1"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="mb-1 block text-[12px] text-[var(--text-secondary)]">目标语言</label>
-              <div className="flex gap-5">
-                {(["zh", "en"] as TranslateTo[]).map((t) => (
-                  <Radio
-                    key={t}
-                    checked={draft.deepseek.translate_to === t}
-                    onChange={() =>
-                      setDraft({ ...draft, deepseek: { ...draft.deepseek, translate_to: t } })
-                    }
-                    className="text-[13px] text-[var(--text-secondary)]"
-                  >
-                    {t === "zh" ? "中文" : "英文"}
-                  </Radio>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="mb-1 block text-[12px] text-[var(--text-secondary)]">打开技能时默认显示</label>
-              <div className="flex gap-5">
-                {(["original", "translated"] as SkillOpenView[]).map((v) => (
-                  <Radio
-                    key={v}
-                    checked={draft.default_view === v}
-                    onChange={() => setDraft({ ...draft, default_view: v })}
-                    className="text-[13px] text-[var(--text-secondary)]"
-                  >
-                    {v === "original" ? "原文" : "译文"}
-                  </Radio>
-                ))}
-              </div>
-              <p className="mt-1 text-[11px] text-[var(--text-muted)]">
-                选「译文」时,打开技能优先显示缓存翻译;无缓存会提示翻译,原文变更后提示重新翻译。
-              </p>
-            </div>
-            <div>
-              <Button onClick={test} disabled={testing}>
-                {testing ? "测试中…" : "连接测试"}
-              </Button>
-            </div>
+                {active === "bulk" && (
+                  <BulkOpsPanel apiKeyConfigured={Boolean(draft.deepseek.api_key.trim())} />
+                )}
+              </motion.div>
+            </AnimatePresence>
           </div>
-        </section>
-
-        {/* 一键翻译全部 */}
-        <section className="mb-5 rounded-[10px] border border-[var(--border-subtle)] p-4">
-          <h2 className="mb-3 text-[13px] font-semibold text-[var(--text-primary)]">一键翻译全部</h2>
-          <p className="mb-3 text-[12px] leading-relaxed text-[var(--text-secondary)]">
-            按内容去重后依次翻译全部已安装 skill 并写入本地缓存,之后打开即可直接显示译文。
-            <span className="text-[var(--warning)]">注意:会消耗 DeepSeek API 额度。</span>
-          </p>
-          <div className="mb-3 flex items-center gap-2">
-            <Button
-              variant="primary"
-              disabled={!draft.deepseek.api_key.trim() || batch.running}
-              title={!draft.deepseek.api_key.trim() ? "请先配置 DeepSeek API Key" : undefined}
-              onClick={startBatch}
-            >
-              {batch.running ? "翻译中…" : "开始翻译全部"}
-            </Button>
-          </div>
-          {batch.running && (
-            <div className="space-y-2">
-              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--bg-elevated)]">
-                <div
-                  className="accent-gradient h-full rounded-full transition-[width] duration-300"
-                  style={{ width: `${batch.total ? Math.round((batch.done / batch.total) * 100) : 0}%` }}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] text-[var(--text-secondary)]">
-                  已处理 {batch.done}/{batch.total}
-                  {batch.current ? ` · 当前: ${batch.current}` : ""}
-                </span>
-                <Button onClick={cancelBatch}>取消</Button>
-              </div>
-            </div>
-          )}
-        </section>
-
-        <div className="flex items-center justify-between">
-          <Button onClick={refresh}>重新扫描</Button>
-          <Button variant="primary" onClick={saveAll}>
-            保存设置
-          </Button>
         </div>
+      </motion.div>
+    </MotionConfig>
+  );
+}
 
-        <footer className="mt-8 pb-4 text-center text-[11px] text-[var(--text-muted)]">
-          skills-hub v0.1 · Rust + Tauri v2 · React 19
-        </footer>
-      </div>
-    </div>
+/**
+ * @description 自动保存状态指示:保存中/已保存,轻量淡入。
+ * @param status - 保存状态
+ */
+function SaveStatusPill({ status }: { status: SaveStatus }) {
+  if (status === "idle") return null;
+  return (
+    <motion.span
+      key={status}
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={`rounded-full px-2.5 py-1 text-[11px] ${
+        status === "saving"
+          ? "bg-[var(--bg-elevated)] text-[var(--text-muted)]"
+          : "bg-[var(--success)]/10 text-[var(--success)]"
+      }`}
+    >
+      {status === "saving" ? "保存中…" : "已保存 ✓"}
+    </motion.span>
   );
 }

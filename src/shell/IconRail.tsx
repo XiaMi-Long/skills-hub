@@ -1,5 +1,9 @@
 import { useAppStore } from "../store/app";
 
+/**
+ * @description 左侧图标栏:首页/设置两个同级入口按钮(选中态一致:accent 渐变高亮)+ 底部明暗切换。
+ * 首页在主界面高亮,设置在设置页高亮,点击各自切换视图。
+ */
 export default function IconRail() {
   const resolvedTheme = useAppStore((s) => s.resolvedTheme);
   const setTheme = useAppStore((s) => s.setTheme);
@@ -8,18 +12,29 @@ export default function IconRail() {
 
   return (
     <div className="glass flex h-full w-[56px] flex-col items-center border-r border-[var(--border-subtle)] py-3">
-      {/* Logo */}
-      <div className="accent-gradient mb-6 flex h-8 w-8 items-center justify-center rounded-lg text-[13px] font-bold text-black/80">
-        S
-      </div>
+      {/* 首页 */}
+      <button
+        onClick={() => setRoute("main")}
+        title="首页"
+        className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 ${
+          route === "main"
+            ? "accent-gradient text-white shadow-[0_0_12px_color-mix(in_srgb,var(--accent-from)_30%,transparent)]"
+            : "text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
+        }`}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m3 10 9-7 9 7" />
+          <path d="M5 8.5V21h14V8.5" />
+        </svg>
+      </button>
 
       {/* 设置 */}
       <button
         onClick={() => setRoute(route === "settings" ? "main" : "settings")}
         title="设置"
-        className={`relative flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 ${
+        className={`mt-2 flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 ${
           route === "settings"
-            ? "accent-gradient text-black/85 shadow-[0_0_12px_color-mix(in_srgb,var(--accent-from)_30%,transparent)]"
+            ? "accent-gradient text-white shadow-[0_0_12px_color-mix(in_srgb,var(--accent-from)_30%,transparent)]"
             : "text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
         }`}
       >

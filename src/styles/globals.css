@@ -20,6 +20,8 @@
   --danger: #ef4444;
   --success: #22c55e;
   --grain-opacity: 0.025;
+  /* 设置页互动背景的基础色(与 --bg-app 渐变协调) */
+  --settings-bg-base: #f7f7f8;
 }
 
 .dark {
@@ -39,6 +41,8 @@
   --danger: #ef4444;
   --success: #22c55e;
   --grain-opacity: 0.04;
+  /* 设置页互动背景的基础色(与 --bg-app 渐变协调) */
+  --settings-bg-base: #0e0e13;
 }
 
 html,
@@ -75,6 +79,34 @@ body {
 .accent-gradient {
   background: linear-gradient(90deg, var(--accent-from), var(--accent-to));
 }
+
+/* ===== 按钮系统(重设计)===== */
+/* 主按钮:纵向渐变 + 顶部内高光 + 底部内阴影,按压微缩 */
+.btn-primary {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent-from) 88%, #fff 12%),
+    color-mix(in srgb, var(--accent-to) 90%, #000 10%)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
+    0 1px 2px rgba(0, 0, 0, 0.28);
+  transition:
+    filter 150ms ease,
+    box-shadow 150ms ease;
+}
+.btn-primary:hover {
+  filter: brightness(1.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
+    0 2px 8px color-mix(in srgb, var(--accent-from) 38%, transparent);
+}
+.btn-primary:active {
+  filter: brightness(0.95);
+}
+
 
 /* 颗粒噪点层(单层无动画) */
 .grain-overlay {
@@ -256,6 +288,96 @@ button:focus-visible {
 }
 .md-body input[type="checkbox"] {
   margin-right: 0.4em;
+}
+
+/* ===== Markdown 排版主题(设置可切换,基于 .md-body 增量) ===== */
+/* 文档风:accent 分隔线标题、引用色块、表格强调 */
+.md-body--docs h1 {
+  font-size: 21px;
+}
+.md-body--docs h2 {
+  padding-bottom: 0.35em;
+  border-bottom: 2px solid color-mix(in srgb, var(--accent-from) 38%, transparent);
+}
+.md-body--docs h3 {
+  color: color-mix(in srgb, var(--accent-to) 78%, var(--text-primary));
+}
+.md-body--docs a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.md-body--docs blockquote {
+  border-left: 3px solid var(--accent-to);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--accent-from) 6%, transparent);
+  padding: 0.5em 1em;
+}
+.md-body--docs th {
+  background: color-mix(in srgb, var(--accent-from) 10%, var(--bg-elevated));
+}
+.md-body--docs pre {
+  border: 1px solid var(--border-strong);
+}
+
+/* 暖纸风:衬线标题 + 暖色代码/引用,适合长文阅读 */
+.md-body--paper {
+  line-height: 1.75;
+}
+.md-body--paper h1,
+.md-body--paper h2,
+.md-body--paper h3 {
+  font-family: Georgia, "Songti SC", "SimSun", serif;
+  font-weight: 600;
+}
+.md-body--paper blockquote {
+  border-left: 3px solid var(--warning);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  padding: 0.6em 1.1em;
+}
+.md-body--paper code {
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+}
+.md-body--paper pre {
+  background: color-mix(in srgb, var(--warning) 4%, var(--bg-elevated));
+}
+
+/* 紧凑风:高密度、小间距,适合开发者快速扫读 */
+.md-body--compact {
+  line-height: 1.45;
+}
+.md-body--compact h1 {
+  font-size: 17px;
+  margin: 0.8em 0 0.4em;
+}
+.md-body--compact h2 {
+  font-size: 15px;
+  margin: 0.8em 0 0.35em;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid var(--border-strong);
+}
+.md-body--compact h3,
+.md-body--compact h4 {
+  font-size: 13.5px;
+}
+.md-body--compact p {
+  margin: 0.4em 0;
+}
+.md-body--compact ul,
+.md-body--compact ol {
+  margin: 0.4em 0;
+  padding-left: 1.4em;
+}
+.md-body--compact pre {
+  margin: 0.5em 0;
+  padding: 8px 10px;
+  font-size: 11.5px;
+}
+.md-body--compact code {
+  font-size: 11.5px;
+}
+.md-body--compact table {
+  font-size: 12px;
 }
 
 /* 代码高亮(hljs 精简暗色配色,适配 token) */

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Button from "./Button";
 import Modal from "./Modal";
 
@@ -10,7 +11,8 @@ export default function ConfirmDialog({
   onCancel,
 }: {
   title: string;
-  message: string;
+  /** 确认文案;传 ReactNode 时可在批量确认中高亮数量等关键信息 */
+  message: ReactNode;
   confirmText?: string;
   danger?: boolean;
   onConfirm: () => void;

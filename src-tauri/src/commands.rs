@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::fs;
-use std::process::Command;
 use std::sync::atomic::Ordering;
 use std::time::UNIX_EPOCH;
 
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
+use tauri_plugin_opener::OpenerExt;
 
 use crate::agents::AgentId;
 use crate::error::{AppError, AppResult};
@@ -82,6 +82,20 @@ pub struct CheckTranslationResult {
 #[derive(Serialize)]
 pub struct TranslateAllStart {
     pub total: u32,
+}
+
+#[derive(Serialize)]
+pub struct CountReplaceableResult {
+    pub total: u32,
+    pub replaceable: u32,
+}
+
+#[derive(Serialize)]
+pub struct ReplaceAllResult {
+    pub replaced: u32,
+    pub skipped: u32,
+    pub failed: u32,
+    pub errors: Vec<llm::BatchErrorItem>,
 }
 
 // ---- 扫描 ----
@@ -269,20 +283,24 @@ pub fn sync_skill(
 
 // ---- 资源管理器 ----
 
+/// 打开资源管理器定位到技能目录:SKILL.md 存在则打开目录并选中该文件,否则直接打开目录。
+/// 用 opener 插件(内部走 Win32 SHOpenFolderAndSelectItems),避免手工调 explorer.exe
+/// /select 参数在路径含空格/特殊字符时的解析问题。
 #[tauri::command]
 pub fn reveal_in_explorer(app: AppHandle, agent_id: AgentId, skill_name: String) -> AppResult<()> {
     let settings = store(&app).load();
     let instance = find_agent_instance(&settings, agent_id, &skill_name)
         .ok_or_else(|| AppError::NotFound(format!("{} / {}", agent_id.display(), skill_name)))?;
-    let target = if instance.abs_path.join("SKILL.md").exists() {
-        instance.abs_path.join("SKILL.md")
+    let skill_md = instance.abs_path.join("SKILL.md");
+    if skill_md.exists() {
+        app.opener()
+            .reveal_item_in_dir(skill_md)
+            .map_err(|e| AppError::Internal(format!("打开资源管理器失败: {e}")))?;
     } else {
-        instance.abs_path.clone()
-    };
-    Command::new("explorer.exe")
-        .arg(format!("/select,{}", target.display()))
-        .spawn()
-        .map_err(|e| AppError::Internal(format!("explorer 启动失败: {e}")))?;
+        app.opener()
+            .open_path(instance.abs_path.to_string_lossy().into_owned(), None::<&str>)
+            .map_err(|e| AppError::Internal(format!("打开资源管理器失败: {e}")))?;
+    }
     Ok(())
 }
 
@@ -296,6 +314,15 @@ pub fn get_settings(app: AppHandle) -> AppResult<Settings> {
 #[tauri::command]
 pub fn save_settings(app: AppHandle, settings: Settings) -> AppResult<()> {
     store(&app).save(&settings)
+}
+
+/// 返回某 agent 的 skills 基目录(覆盖优先,否则 home/默认子路径),供浏览对话框定位初始目录。
+#[tauri::command]
+pub fn get_agent_dir(app: AppHandle, agent_id: AgentId) -> AppResult<String> {
+    let settings = store(&app).load();
+    Ok(agent_base_dir(&settings, agent_id)
+        .to_string_lossy()
+        .into_owned())
 }
 
 // ---- 翻译 ----
@@ -473,6 +500,114 @@ pub async fn test_deepseek(app: AppHandle) -> AppResult<TestDeepseekResult> {
     let settings = store(&app).load();
     let (ok, message) = llm::test_deepseek(&settings.deepseek).await;
     Ok(TestDeepseekResult { ok, message })
+}
+
+// ---- 批量替换原文 ----
+
+/// 可替换候选:SKILL.md 路径 + 展示名 + 命中的译文。
+struct ReplaceCandidate {
+    path: std::path::PathBuf,
+    label: String,
+    text: String,
+}
+
+/// 扫描全部实例,收集当前内容命中翻译缓存(Hit)的副本。
+/// 只认 Hit:与单副本替换一致,stale/未翻译的绝不静默写回。
+fn collect_replace_candidates(
+    app: &AppHandle,
+    settings: &Settings,
+) -> (u32, Vec<ReplaceCandidate>) {
+    let scan = crate::scanner::scan_all(settings);
+    // 有 SKILL.md 的副本总数(不含无 SKILL.md 的目录)
+    let mut total = 0u32;
+    let mut candidates = Vec::new();
+
+    for g in &scan.groups {
+        for inst in &g.instances {
+            if !inst.has_skill_md {
+                continue;
+            }
+            total += 1;
+            let path = inst.abs_path.join("SKILL.md");
+            // 纯查缓存:Hit = 译文与当前内容匹配,可直接写回
+            if let Ok((llm::TranslationStatus::Hit, Some(text))) =
+                llm::check_translation(app, &settings.deepseek, &path)
+            {
+                candidates.push(ReplaceCandidate {
+                    path,
+                    label: format!("{} / {}", inst.agent_id.display(), inst.name),
+                    text,
+                });
+            }
+        }
+    }
+
+    (total, candidates)
+}
+
+/// 查询可用译文替换的副本数(二次确认弹窗展示用,纯本地不写盘)。
+#[tauri::command]
+pub fn count_replaceable_translations(app: AppHandle) -> AppResult<CountReplaceableResult> {
+    let settings = store(&app).load();
+    let (total, candidates) = collect_replace_candidates(&app, &settings);
+    Ok(CountReplaceableResult {
+        total,
+        replaceable: candidates.len() as u32,
+    })
+}
+
+/// 一键用译文替换原文:命中缓存的副本逐个写回 SKILL.md,
+/// 并把译文登记为新内容的缓存(与单副本 replace_with_translation 一致)。
+#[tauri::command]
+pub fn replace_all_with_translations(app: AppHandle) -> AppResult<ReplaceAllResult> {
+    // 批量翻译进行中禁止替换,避免与翻译任务互相干扰
+    if app
+        .state::<llm::TranslateState>()
+        .batch_running
+        .load(Ordering::SeqCst)
+    {
+        return Err(AppError::Llm("批量翻译运行中,请等待完成后再替换".into()));
+    }
+
+    let settings = store(&app).load();
+    let (total, candidates) = collect_replace_candidates(&app, &settings);
+    // 未翻译/译文过期的副本数(candidates 必为 total 子集,不会下溢)
+    let skipped = total - candidates.len() as u32;
+
+    let mut replaced = 0u32;
+    let mut failed = 0u32;
+    let mut errors: Vec<llm::BatchErrorItem> = Vec::new();
+
+    for c in &candidates {
+        // 单个失败不中断,逐条收集结果
+        match fs::write(&c.path, c.text.as_bytes()) {
+            Ok(()) => {
+                // 新内容 = 译文本身,登记后下次打开直接命中缓存
+                llm::register_translation(
+                    &app,
+                    &settings.deepseek,
+                    &c.path,
+                    c.text.as_bytes(),
+                    &c.text,
+                );
+                replaced += 1;
+            }
+            Err(e) => {
+                failed += 1;
+                errors.push(llm::BatchErrorItem {
+                    name: c.label.clone(),
+                    message: format!("写入失败: {e}"),
+                });
+            }
+        }
+    }
+
+    Ok(ReplaceAllResult {
+        replaced,
+        skipped,
+        failed,
+        errors,
+    })
 }
 
 

@@ -65,6 +65,22 @@ impl Default for SkillOpenView {
     }
 }
 
+/// 技能预览的 Markdown 排版主题。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum MarkdownTheme {
+    Default,
+    Docs,
+    Paper,
+    Compact,
+}
+
+impl Default for MarkdownTheme {
+    fn default() -> Self {
+        MarkdownTheme::Default
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeepseekSettings {
     pub api_key: String,
@@ -95,6 +111,9 @@ pub struct Settings {
     /// 打开技能默认视图,旧配置默认原文
     #[serde(default)]
     pub default_view: SkillOpenView,
+    /// 技能预览 Markdown 排版主题,旧配置默认 default
+    #[serde(default)]
+    pub markdown_theme: MarkdownTheme,
     pub agent_overrides: HashMap<AgentId, PathBuf>,
     pub deepseek: DeepseekSettings,
 }
@@ -105,6 +124,7 @@ impl Default for Settings {
             theme: Theme::Dark,
             accent: Accent::default(),
             default_view: SkillOpenView::default(),
+            markdown_theme: MarkdownTheme::default(),
             agent_overrides: HashMap::new(),
             deepseek: DeepseekSettings::default(),
         }
@@ -160,6 +180,7 @@ mod tests {
         assert_eq!(loaded.theme, Theme::Dark);
         assert_eq!(loaded.accent, Accent::Blue);
         assert_eq!(loaded.default_view, SkillOpenView::Original);
+        assert_eq!(loaded.markdown_theme, MarkdownTheme::Default);
         assert_eq!(loaded.deepseek.translate_to, TranslateTo::Zh);
         assert_eq!(
             loaded.agent_overrides.get(&AgentId::Codex).unwrap().to_string_lossy(),
@@ -195,6 +216,7 @@ mod tests {
         assert_eq!(s.theme, Theme::Light);
         assert_eq!(s.accent, Accent::Blue);
         assert_eq!(s.default_view, SkillOpenView::Original);
+        assert_eq!(s.markdown_theme, MarkdownTheme::Default);
         assert_eq!(s.deepseek.translate_to, TranslateTo::Zh);
     }
 

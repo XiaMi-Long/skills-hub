@@ -10,10 +10,6 @@ export default function TopToolbar() {
 
   return (
     <div className="glass flex h-[46px] shrink-0 items-center gap-2 border-b border-[var(--border-subtle)] px-3">
-      <div className="text-[14px] font-semibold tracking-tight">skills-hub</div>
-      <div className="ml-1 rounded-md bg-[var(--bg-elevated)] px-2 py-0.5 text-[11px] text-[var(--text-muted)] mono">
-        v0.1
-      </div>
       <div className="flex-1" />
       {/* 新建技能:工具栏唯一主操作,用 accent 强调 */}
       <Button variant="primary" onClick={() => setNewOpen(true)}>

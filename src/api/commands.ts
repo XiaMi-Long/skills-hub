@@ -1,8 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   CheckTranslationResult,
+  CountReplaceableResult,
   DeleteScope,
   ReadSkillResult,
+  ReplaceAllResult,
   ScanResult,
   Settings,
   SkillInstance,
@@ -70,6 +72,9 @@ export const getSettings = () => invoke<Settings>("get_settings");
 export const saveSettings = (settings: Settings) =>
   invoke<void>("save_settings", { settings });
 
+export const getAgentDir = (agentId: AgentId) =>
+  invoke<string>("get_agent_dir", { agentId });
+
 export const translateSkill = (agentId: AgentId, skillName: string) =>
   invoke<TranslateResult>("translate_skill", { agentId, skillName });
 
@@ -94,5 +99,11 @@ export const replaceWithTranslation = (
 export const translateAll = () => invoke<TranslateAllStart>("translate_all");
 
 export const cancelTranslateAll = () => invoke<void>("cancel_translate_all");
+
+export const countReplaceableTranslations = () =>
+  invoke<CountReplaceableResult>("count_replaceable_translations");
+
+export const replaceAllWithTranslations = () =>
+  invoke<ReplaceAllResult>("replace_all_with_translations");
 
 export const testDeepseek = () => invoke<TestDeepseekResult>("test_deepseek");

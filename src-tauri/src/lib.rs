@@ -24,11 +24,14 @@ pub fn run() {
             commands::reveal_in_explorer,
             commands::get_settings,
             commands::save_settings,
+            commands::get_agent_dir,
             commands::check_translation,
             commands::translate_skill,
             commands::replace_with_translation,
             commands::translate_all,
             commands::cancel_translate_all,
+            commands::count_replaceable_translations,
+            commands::replace_all_with_translations,
             commands::test_deepseek,
         ])
         .run(tauri::generate_context!())
