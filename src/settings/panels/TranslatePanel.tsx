@@ -7,7 +7,7 @@ import Select from "../../ui/Select";
 import SectionTitle from "../SectionTitle";
 import type { Settings, SkillOpenView, TranslateTo } from "../../types/api";
 
-const MODELS = ["deepseek-chat", "deepseek-reasoner"];
+const MODELS = ["deepseek-v4-flash", "deepseek-v4-pro"];
 
 /** 表单行:左侧固定宽度标签 + 右侧控件(设置页经典排版) */
 function FieldRow({ label, children }: { label: string; children: ReactNode }) {

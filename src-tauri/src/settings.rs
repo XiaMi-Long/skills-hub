@@ -95,7 +95,7 @@ impl Default for DeepseekSettings {
     fn default() -> Self {
         Self {
             api_key: String::new(),
-            model: "deepseek-chat".into(),
+            model: "deepseek-v4-flash".into(),
             base_url: "https://api.deepseek.com/v1".into(),
             translate_to: TranslateTo::default(),
         }
@@ -186,7 +186,7 @@ mod tests {
             loaded.agent_overrides.get(&AgentId::Codex).unwrap().to_string_lossy(),
             "C:/tmp/codex"
         );
-        assert_eq!(loaded.deepseek.model, "deepseek-chat");
+        assert_eq!(loaded.deepseek.model, "deepseek-v4-flash");
         assert_eq!(loaded.deepseek.base_url, "https://api.deepseek.com/v1");
         // 无 .tmp 残留
         let entries: Vec<_> = std::fs::read_dir(dir.path()).unwrap().collect();

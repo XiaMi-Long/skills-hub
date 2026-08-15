@@ -426,14 +426,16 @@ pub fn replace_with_translation(
         }
     }
 
-    fs::write(&skill_md, translated_raw.as_bytes()).map_err(|e| AppError::Io(e))?;
+    // 防御:写回前剥离译文首尾可能的 ``` 围栏(老缓存/旧文件可能已带围栏)
+    let cleaned = llm::strip_fences(&translated_raw);
+    fs::write(&skill_md, cleaned.as_bytes()).map_err(|e| AppError::Io(e))?;
     // 新内容 = 译文本身,登记后下次打开直接命中缓存
     llm::register_translation(
         &app,
         &settings.deepseek,
         &skill_md,
-        translated_raw.as_bytes(),
-        &translated_raw,
+        cleaned.as_bytes(),
+        &cleaned,
     );
 
     Ok(rebuild_instance(agent_id, instance.abs_path, &skill_name))
@@ -579,16 +581,17 @@ pub fn replace_all_with_translations(app: AppHandle) -> AppResult<ReplaceAllResu
     let mut errors: Vec<llm::BatchErrorItem> = Vec::new();
 
     for c in &candidates {
-        // 单个失败不中断,逐条收集结果
-        match fs::write(&c.path, c.text.as_bytes()) {
+        // 单个失败不中断,逐条收集结果;写回前剥离可能的 ``` 围栏
+        let cleaned = llm::strip_fences(&c.text);
+        match fs::write(&c.path, cleaned.as_bytes()) {
             Ok(()) => {
                 // 新内容 = 译文本身,登记后下次打开直接命中缓存
                 llm::register_translation(
                     &app,
                     &settings.deepseek,
                     &c.path,
-                    c.text.as_bytes(),
-                    &c.text,
+                    cleaned.as_bytes(),
+                    &cleaned,
                 );
                 replaced += 1;
             }

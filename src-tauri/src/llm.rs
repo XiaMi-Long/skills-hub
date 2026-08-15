@@ -4,17 +4,12 @@ use std::hash::{DefaultHasher, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use async_openai::config::OpenAIConfig;
-use async_openai::types::{
-    ChatCompletionRequestMessage, ChatCompletionRequestSystemMessage,
-    ChatCompletionRequestSystemMessageContent, ChatCompletionRequestUserMessage,
-    ChatCompletionRequestUserMessageContent, CreateChatCompletionRequestArgs,
-};
-use async_openai::Client;
 use futures::StreamExt;
+use reqwest::Client as HttpClient;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::error::{AppError, AppResult};
@@ -105,6 +100,27 @@ pub fn content_hash(raw: &[u8]) -> String {
     let mut h = DefaultHasher::new();
     h.write(raw);
     format!("{:016x}", h.finish())
+}
+
+/// 去掉 LLM 翻译输出首尾可能包裹的 ``` 代码围栏(模型常习惯性用围栏包裹整段译文)。
+/// 仅当首行是开 fence、末行是闭 fence 时才剥离,避免误伤正文里的真实代码块。
+pub fn strip_fences(text: &str) -> String {
+    let t = text.trim();
+    let mut lines = t.lines();
+    let opens = lines
+        .next()
+        .map(|l| l.trim_start().starts_with("```"))
+        .unwrap_or(false);
+    let closes = lines
+        .last()
+        .map(|l| l.trim().starts_with("```"))
+        .unwrap_or(false);
+    if !(opens && closes) {
+        return t.to_string();
+    }
+    let all: Vec<&str> = t.lines().collect();
+    let inner = &all[1..all.len().saturating_sub(1)];
+    inner.join("\n").trim().to_string()
 }
 
 pub fn cache_dir(app: &AppHandle) -> AppResult<PathBuf> {
@@ -229,49 +245,88 @@ pub fn check_translation(
 
 // ---- 客户端与请求 ----
 
-fn build_client(ds: &DeepseekSettings) -> AppResult<Client<OpenAIConfig>> {
-    if ds.api_key.trim().is_empty() {
-        return Err(AppError::Llm(
-            "未配置 DeepSeek API Key,请在设置中配置".into(),
-        ));
-    }
-    let config = OpenAIConfig::new()
-        .with_api_key(ds.api_key.clone())
-        .with_api_base(ds.base_url.clone());
-    Ok(Client::with_config(config))
+/// 构造带连接超时的 HTTP 客户端(API key 通过请求的 Bearer 头携带)。
+fn http_client() -> AppResult<HttpClient> {
+    HttpClient::builder()
+        .connect_timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| AppError::Llm(format!("HTTP 客户端构造失败: {e}")))
 }
 
-fn build_messages(system: &str, user: &str) -> Vec<ChatCompletionRequestMessage> {
+/// Chat Completion 请求 URL(在 base_url 后拼 /chat/completions)。
+fn chat_url(ds: &DeepseekSettings) -> String {
+    format!("{}/chat/completions", ds.base_url.trim_end_matches('/'))
+}
+
+/// 组装 system + user 消息(system_prompt 决定目标语言)。
+fn build_messages(system: &str, user: &str) -> Vec<Value> {
     vec![
-        ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
-            content: ChatCompletionRequestSystemMessageContent::Text(system.into()),
-            name: None,
-        }),
-        ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
-            content: ChatCompletionRequestUserMessageContent::Text(user.into()),
-            name: None,
-        }),
+        json!({"role": "system", "content": system}),
+        json!({"role": "user", "content": user}),
     ]
+}
+
+/// 构造 Chat Completion 请求体。
+/// `thinking: {type: disabled}` 关闭 DeepSeek V4 的思考模式,不输出思维链,更快更省。
+fn build_chat_body(ds: &DeepseekSettings, messages: Vec<Value>, stream: bool) -> Value {
+    json!({
+        "model": ds.model,
+        "messages": messages,
+        "stream": stream,
+        "thinking": { "type": "disabled" },
+    })
+}
+
+/// 非流式 Chat Completion:返回 content 文本(兼容 string / 数组两种 OpenAI 格式)。
+async fn chat_completion(ds: &DeepseekSettings, messages: Vec<Value>) -> Result<String, String> {
+    if ds.api_key.trim().is_empty() {
+        return Err("未配置 DeepSeek API Key,请在设置中配置".into());
+    }
+    let client = http_client().map_err(|e| e.to_string())?;
+    let resp = client
+        .post(chat_url(ds))
+        .bearer_auth(ds.api_key.trim())
+        .json(&build_chat_body(ds, messages, false))
+        .send()
+        .await
+        .map_err(|e| format!("DeepSeek 请求失败: {e}"))?;
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        let snippet: String = body.chars().take(300).collect();
+        return Err(format!("DeepSeek 请求失败({status}): {snippet}"));
+    }
+    let j: Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("响应解析失败: {e}"))?;
+    let content = j["choices"][0]["message"]["content"].clone();
+    Ok(match content {
+        Value::String(s) => s,
+        Value::Array(arr) => arr.iter().filter_map(|x| x["text"].as_str()).collect(),
+        _ => String::new(),
+    })
+}
+
+/// 解析一行 SSE(data: JSON),提取 choices[0].delta.content;非 data 行或 [DONE] 返回 None。
+fn parse_sse_delta(line: &str) -> Option<String> {
+    let data = line.trim().strip_prefix("data:")?.trim();
+    if data == "[DONE]" {
+        return None;
+    }
+    let v: Value = serde_json::from_str(data).ok()?;
+    v["choices"]
+        .as_array()?
+        .first()?["delta"]["content"]
+        .as_str()
+        .map(|s| s.to_string())
 }
 
 /// 非流式翻译一段文本(批量翻译用)。返回译文或可读错误。
 pub async fn translate_text(ds: &DeepseekSettings, raw: &str) -> Result<String, String> {
-    let client = build_client(ds).map_err(|e| e.to_string())?;
-    let req = CreateChatCompletionRequestArgs::default()
-        .model(ds.model.clone())
-        .messages(build_messages(system_prompt(ds.translate_to), raw))
-        .build()
-        .map_err(|e| format!("请求构造失败: {e}"))?;
-    let resp = client
-        .chat()
-        .create(req)
+    chat_completion(ds, build_messages(system_prompt(ds.translate_to), raw))
         .await
-        .map_err(|e| format!("DeepSeek 请求失败: {e}"))?;
-    Ok(resp
-        .choices
-        .first()
-        .and_then(|c| c.message.content.clone())
-        .unwrap_or_default())
+        .map(|t| strip_fences(&t))
 }
 
 // ---- 单技能流式翻译 ----
@@ -299,7 +354,18 @@ pub async fn stream_translation_task(
     };
     let raw = String::from_utf8_lossy(&raw_bytes).into_owned();
 
-    let client = match build_client(&ds) {
+    if ds.api_key.trim().is_empty() {
+        let _ = app.emit(
+            "translate-error",
+            TranslateError {
+                request_id,
+                message: "未配置 DeepSeek API Key,请在设置中配置".into(),
+            },
+        );
+        return;
+    }
+
+    let client = match http_client() {
         Ok(c) => c,
         Err(e) => {
             let _ = app.emit(
@@ -313,63 +379,18 @@ pub async fn stream_translation_task(
         }
     };
 
-    let req = match CreateChatCompletionRequestArgs::default()
-        .model(ds.model.clone())
-        .messages(build_messages(system_prompt(ds.translate_to), &raw))
-        .build()
+    let resp = match client
+        .post(chat_url(&ds))
+        .bearer_auth(ds.api_key.trim())
+        .json(&build_chat_body(
+            &ds,
+            build_messages(system_prompt(ds.translate_to), &raw),
+            true,
+        ))
+        .send()
+        .await
     {
         Ok(r) => r,
-        Err(e) => {
-            let _ = app.emit(
-                "translate-error",
-                TranslateError {
-                    request_id,
-                    message: format!("请求构造失败: {e}"),
-                },
-            );
-            return;
-        }
-    };
-
-    let mut text = String::new();
-    match client.chat().create_stream(req).await {
-        Ok(mut stream) => {
-            while let Some(chunk) = stream.next().await {
-                match chunk {
-                    Ok(c) => {
-                        if let Some(delta) = c.choices.first().and_then(|ch| ch.delta.content.clone())
-                        {
-                            text.push_str(&delta);
-                            let _ = app.emit(
-                                "translate-chunk",
-                                TranslateChunk {
-                                    request_id: request_id.clone(),
-                                    delta,
-                                },
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        let _ = app.emit(
-                            "translate-error",
-                            TranslateError {
-                                request_id: request_id.clone(),
-                                message: format!("流式响应错误: {e}"),
-                            },
-                        );
-                        return;
-                    }
-                }
-            }
-            register_translation(&app, &ds, &abs_path, &raw_bytes, &text);
-            let _ = app.emit(
-                "translate-done",
-                TranslateDone {
-                    request_id,
-                    text,
-                },
-            );
-        }
         Err(e) => {
             let _ = app.emit(
                 "translate-error",
@@ -378,8 +399,83 @@ pub async fn stream_translation_task(
                     message: format!("DeepSeek 请求失败: {e}"),
                 },
             );
+            return;
+        }
+    };
+
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        let snippet: String = body.chars().take(300).collect();
+        let _ = app.emit(
+            "translate-error",
+            TranslateError {
+                request_id,
+                message: format!("DeepSeek 请求失败({status}): {snippet}"),
+            },
+        );
+        return;
+    }
+
+    // 流式读取 SSE,逐行解析 delta.content 并 emit chunk
+    let mut bytes_stream = resp.bytes_stream();
+    let mut buffer = String::new();
+    let mut text = String::new();
+    while let Some(chunk) = bytes_stream.next().await {
+        let bytes = match chunk {
+            Ok(b) => b,
+            Err(e) => {
+                let _ = app.emit(
+                    "translate-error",
+                    TranslateError {
+                        request_id: request_id.clone(),
+                        message: format!("流式响应错误: {e}"),
+                    },
+                );
+                return;
+            }
+        };
+        buffer.push_str(&String::from_utf8_lossy(&bytes));
+        // 处理缓冲区内完整的一行
+        while let Some(idx) = buffer.find('\n') {
+            let line = buffer[..idx].trim().to_string();
+            buffer.drain(..=idx);
+            if let Some(delta) = parse_sse_delta(&line) {
+                text.push_str(&delta);
+                let _ = app.emit(
+                    "translate-chunk",
+                    TranslateChunk {
+                        request_id: request_id.clone(),
+                        delta,
+                    },
+                );
+            }
         }
     }
+    // 末尾可能残留未换行的 data,容错处理
+    if !buffer.trim().is_empty() {
+        if let Some(delta) = parse_sse_delta(buffer.trim()) {
+            text.push_str(&delta);
+            let _ = app.emit(
+                "translate-chunk",
+                TranslateChunk {
+                    request_id: request_id.clone(),
+                    delta,
+                },
+            );
+        }
+    }
+
+    // 写缓存前剥离 LLM 包裹的 ``` 围栏,保证落盘的译文是干净全文
+    let text = strip_fences(&text);
+    register_translation(&app, &ds, &abs_path, &raw_bytes, &text);
+    let _ = app.emit(
+        "translate-done",
+        TranslateDone {
+            request_id,
+            text,
+        },
+    );
 }
 
 // ---- 批量翻译 ----
@@ -473,27 +569,37 @@ fn register_paths(app: &AppHandle, paths: &[PathBuf], raw: &[u8], key: &str) {
 
 /// 连接测试:非流式 ping。
 pub async fn test_deepseek(ds: &DeepseekSettings) -> (bool, String) {
-    let client = match build_client(ds) {
-        Ok(c) => c,
-        Err(e) => return (false, e.to_string()),
-    };
-    let req = match CreateChatCompletionRequestArgs::default()
-        .model(ds.model.clone())
-        .messages(build_messages("You are a ping helper. Reply with exactly: pong", "ping"))
-        .build()
+    match chat_completion(
+        ds,
+        build_messages("You are a ping helper. Reply with exactly: pong", "ping"),
+    )
+    .await
     {
-        Ok(r) => r,
-        Err(e) => return (false, format!("请求构造失败: {e}")),
-    };
-    match client.chat().create(req).await {
-        Ok(resp) => {
-            let text = resp
-                .choices
-                .first()
-                .and_then(|c| c.message.content.clone())
-                .unwrap_or_default();
-            (true, format!("连接成功: {text}"))
-        }
-        Err(e) => (false, format!("DeepSeek 请求失败: {e}")),
+        Ok(text) => (true, format!("连接成功: {text}")),
+        Err(e) => (false, e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strip_fences_removes_wrapping_only() {
+        // 常规包裹(带语言标识)→ 剥离
+        let wrapped = "```markdown\n# 标题\n\n正文\n```";
+        assert_eq!(strip_fences(wrapped), "# 标题\n\n正文");
+
+        // 无语言标识 + 首尾空白
+        let bare = "\n```\n正文内容\n```\n";
+        assert_eq!(strip_fences(bare), "正文内容");
+
+        // 正文里真实代码块不误伤(首行不是 fence)
+        let normal = "标题\n\n```js\nconst a = 1;\n```\n";
+        assert_eq!(strip_fences(normal), "标题\n\n```js\nconst a = 1;\n```");
+
+        // 只有开 fence 没有闭 fence → 原样
+        let malformed = "```\n只有开头";
+        assert_eq!(strip_fences(malformed), "```\n只有开头");
     }
 }
