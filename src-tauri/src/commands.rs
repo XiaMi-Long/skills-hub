@@ -10,6 +10,7 @@ use tauri_plugin_opener::OpenerExt;
 use crate::agents::AgentId;
 use crate::error::{AppError, AppResult};
 use crate::llm;
+use crate::remote;
 use crate::scanner::{agent_base_dir, build_instance, find_agent_instance};
 use crate::settings::{DeepseekSettings, Settings, SettingsStore};
 use crate::skill::{group_key, DeleteScope, SkillInstance, SyncDirective};
@@ -611,6 +612,179 @@ pub fn replace_all_with_translations(app: AppHandle) -> AppResult<ReplaceAllResu
         failed,
         errors,
     })
+}
+
+// ---- 窗口质感(亚克力透明) ----
+
+/// 构造亚克力窗口效果配置(Windows 10/11)。
+pub fn fancy_effects() -> tauri::window::EffectsBuilder {
+    tauri::window::EffectsBuilder::new().effect(tauri::window::Effect::Acrylic)
+}
+
+/// 开/关窗口亚克力透明(质感背景设置项的窗口层部分)。
+/// 需要窗口配置 transparent:true;背景半透明由前端 CSS(html.fancy-bg)承担。
+#[tauri::command]
+pub fn set_window_fancy(app: AppHandle, enabled: bool) -> AppResult<()> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| AppError::Internal("主窗口不存在".into()))?;
+    let result = if enabled {
+        window.set_effects(fancy_effects().build())
+    } else {
+        window.set_effects(None)
+    };
+    result.map_err(|e| AppError::Internal(format!("窗口透明效果设置失败: {e}")))
+}
+
+// ---- 远程技能(命令添加) ----
+
+/// AI 解读技能内容的提示词:要求严格输出 JSON(title/description/summary)。
+const AI_READ_SYSTEM: &str = "你是 AI 技能解析器。用户会给你一份 SKILL.md 技能文档(可能含 YAML frontmatter)。阅读后只输出一个 JSON 对象,字段如下:title——技能标题(简短短语);description——一句话中文描述(50-100字,说明这个技能做什么、什么时候用);summary——中文摘要(不超过 150 字,概括正文要点)。不要输出 JSON 以外的任何文本,不要用代码围栏包裹。";
+
+#[derive(Serialize)]
+pub struct AiSkillRead {
+    pub title: String,
+    pub description: String,
+    pub summary: String,
+}
+
+/// 解析安装命令/链接,列出 GitHub 仓库内的全部技能。
+#[tauri::command]
+pub async fn list_remote_skills(source: String) -> AppResult<remote::RemoteRepoInfo> {
+    remote::list_remote_skills(&source).await
+}
+
+/// 下载仓库中某个技能的全部文件(缓存到内存),返回预览所需元信息。
+#[tauri::command]
+pub async fn fetch_remote_skill(
+    app: AppHandle,
+    owner: String,
+    repo: String,
+    git_ref: String,
+    dir: String,
+) -> AppResult<remote::FetchedSkillMeta> {
+    let state = app.state::<remote::RemoteState>();
+    remote::fetch_remote_skill(&state, &owner, &repo, &git_ref, &dir).await
+}
+
+/// AI 读取 SKILL.md 内容,返回标题/描述/摘要(供预填表单)。
+#[tauri::command]
+pub async fn ai_read_skill(app: AppHandle, raw: String) -> AppResult<AiSkillRead> {
+    let settings = store(&app).load();
+    let ds = settings.deepseek;
+    if ds.api_key.trim().is_empty() {
+        return Err(AppError::Llm("未配置 DeepSeek API Key,请在设置中配置".into()));
+    }
+    // 限制长度,控制 token 消耗
+    let truncated: String = raw.chars().take(20_000).collect();
+    let user = format!("以下是 SKILL.md 内容:\n\n{truncated}");
+    let text = llm::complete_text(&ds, AI_READ_SYSTEM, &user)
+        .await
+        .map_err(AppError::Llm)?;
+
+    // 容错:剥离可能的围栏,截取首个 { 到末个 } 之间的 JSON
+    let cleaned = llm::strip_fences(&text);
+    let start = cleaned
+        .find('{')
+        .ok_or_else(|| AppError::Llm("AI 返回内容无法解析为 JSON".into()))?;
+    let end = cleaned
+        .rfind('}')
+        .ok_or_else(|| AppError::Llm("AI 返回内容无法解析为 JSON".into()))?;
+    if end <= start {
+        return Err(AppError::Llm("AI 返回内容无法解析为 JSON".into()));
+    }
+    let v: serde_json::Value = serde_json::from_str(&cleaned[start..=end])
+        .map_err(|e| AppError::Llm(format!("AI 返回 JSON 解析失败: {e}")))?;
+
+    Ok(AiSkillRead {
+        title: v["title"].as_str().unwrap_or_default().trim().to_string(),
+        description: v["description"].as_str().unwrap_or_default().trim().to_string(),
+        summary: v["summary"].as_str().unwrap_or_default().trim().to_string(),
+    })
+}
+
+/// 单个 target 安装:staging 目录内写 SKILL.md + 辅助文件,再 rename 替换目标,
+/// 中途失败不会留下半成品(与同步引擎同策略)。
+fn install_one(
+    agent: AgentId,
+    base: &std::path::Path,
+    name: &str,
+    description: &str,
+    body_md: &str,
+    files: &[(String, Vec<u8>)],
+    overwrite: bool,
+) -> Result<SkillInstance, String> {
+    if name.is_empty() || name.contains('/') || name.contains('\\') || name == "." || name == ".." {
+        return Err("非法技能名".into());
+    }
+    let target = base.join(name);
+    if target.exists() && !overwrite {
+        return Err(format!("{} 已存在同名技能", agent.display()));
+    }
+
+    let staging = base.join(format!(".skills-hub-staging-{}", uuid::Uuid::new_v4()));
+    let build = (|| -> Result<(), String> {
+        fs::create_dir_all(&staging).map_err(|e| e.to_string())?;
+        let fm = format!(
+            "---\nname: {}\ndescription: {}\n---\n\n",
+            yaml_scalar(name),
+            yaml_scalar(description)
+        );
+        fs::write(staging.join("SKILL.md"), format!("{fm}{body_md}")).map_err(|e| e.to_string())?;
+        for (rel, bytes) in files {
+            let path = remote::safe_join(&staging, rel)?;
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            fs::write(&path, bytes).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    })();
+    if let Err(e) = build {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(e);
+    }
+
+    let replace = (|| -> Result<(), String> {
+        if target.exists() {
+            fs::remove_dir_all(&target).map_err(|e| e.to_string())?;
+        }
+        fs::rename(&staging, &target).map_err(|e| e.to_string())
+    })();
+    if let Err(e) = replace {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(format!("替换目标目录失败: {e}"));
+    }
+
+    Ok(build_instance(agent, target, name.to_string()))
+}
+
+/// 把已获取(fetch_id)的远程技能安装到所选 agent:SKILL.md 按表单内容重建,
+/// 辅助文件原样落盘;逐 target 收集结果,部分失败不中断。
+#[tauri::command]
+pub fn install_remote_skill(
+    app: AppHandle,
+    fetch_id: String,
+    name: String,
+    description: String,
+    body_md: String,
+    targets: Vec<AgentId>,
+    overwrite: bool,
+) -> AppResult<CreateSkillResult> {
+    let settings = store(&app).load();
+    let files = app
+        .state::<remote::RemoteState>()
+        .take(&fetch_id)
+        .ok_or_else(|| AppError::NotFound("获取结果不存在或已过期,请重新获取".into()))?;
+
+    let mut results: Vec<(AgentId, Result<SkillInstance, String>)> = Vec::new();
+    for target in targets {
+        let base = agent_base_dir(&settings, target);
+        let out = install_one(target, &base, &name, &description, &body_md, &files, overwrite);
+        results.push((target, out));
+    }
+
+    Ok(CreateSkillResult { results })
 }
 
 

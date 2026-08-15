@@ -65,6 +65,11 @@ impl Default for SkillOpenView {
     }
 }
 
+/// serde 默认:旧配置没有 fancy_background 字段 → 默认开启。
+fn default_fancy_background() -> bool {
+    true
+}
+
 /// 技能预览的 Markdown 排版主题。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -114,6 +119,9 @@ pub struct Settings {
     /// 技能预览 Markdown 排版主题,旧配置默认 default
     #[serde(default)]
     pub markdown_theme: MarkdownTheme,
+    /// 全局质感背景(渐变 + 颗粒噪点 + 磨砂玻璃 + 半透明面板),旧配置默认开启
+    #[serde(default = "default_fancy_background")]
+    pub fancy_background: bool,
     pub agent_overrides: HashMap<AgentId, PathBuf>,
     pub deepseek: DeepseekSettings,
 }
@@ -125,6 +133,7 @@ impl Default for Settings {
             accent: Accent::default(),
             default_view: SkillOpenView::default(),
             markdown_theme: MarkdownTheme::default(),
+            fancy_background: true,
             agent_overrides: HashMap::new(),
             deepseek: DeepseekSettings::default(),
         }
@@ -181,6 +190,7 @@ mod tests {
         assert_eq!(loaded.accent, Accent::Blue);
         assert_eq!(loaded.default_view, SkillOpenView::Original);
         assert_eq!(loaded.markdown_theme, MarkdownTheme::Default);
+        assert!(loaded.fancy_background);
         assert_eq!(loaded.deepseek.translate_to, TranslateTo::Zh);
         assert_eq!(
             loaded.agent_overrides.get(&AgentId::Codex).unwrap().to_string_lossy(),
@@ -200,6 +210,7 @@ mod tests {
         let s = store.load();
         assert_eq!(s.theme, Theme::Dark);
         assert_eq!(s.accent, Accent::Blue);
+        assert!(s.fancy_background);
         assert!(s.agent_overrides.is_empty());
     }
 
@@ -217,6 +228,7 @@ mod tests {
         assert_eq!(s.accent, Accent::Blue);
         assert_eq!(s.default_view, SkillOpenView::Original);
         assert_eq!(s.markdown_theme, MarkdownTheme::Default);
+        assert!(s.fancy_background);
         assert_eq!(s.deepseek.translate_to, TranslateTo::Zh);
     }
 

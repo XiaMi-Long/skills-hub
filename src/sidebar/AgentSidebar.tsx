@@ -21,7 +21,7 @@ export default function AgentSidebar() {
   const allCount = scan?.groups.length ?? 0;
 
   return (
-    <div className="flex h-full flex-col bg-[var(--bg-pane)]">
+    <div className="pane flex h-full flex-col bg-[var(--bg-pane)]">
       <div className="px-3 pt-3 pb-1 text-[11px] font-semibold tracking-wider text-[var(--text-muted)] uppercase">
         Agents
       </div>

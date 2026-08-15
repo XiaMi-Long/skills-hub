@@ -1,13 +1,138 @@
 <!doctype html>
-<html lang="zh-CN" class="dark">
+<html lang="zh-CN" class="dark fancy-bg">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>skills-hub</title>
+    <style>
+      /* ===== 启动加载占位(splash)=====
+         纯内联 HTML/CSS,不依赖任何打包产物;位于 #root 内,
+         React createRoot 首次渲染时自动替换,无需手动移除。
+         视觉遵循 DESIGN.md §8:暗色默认、渐变 + 颗粒 + accent 光晕、玻璃浮层。
+         背景用半透明色,兼容窗口亚克力(质感模式);关闭质感时也不会全透。 */
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      .splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background:
+          radial-gradient(1400px 900px at 85% -12%, rgba(37, 99, 235, 0.3), transparent 65%),
+          radial-gradient(1200px 820px at -8% 112%, rgba(59, 130, 246, 0.22), transparent 62%),
+          linear-gradient(180deg, rgba(11, 11, 13, 0.82), rgba(20, 20, 24, 0.86));
+        color: #ededed;
+        font-family: Inter, "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        user-select: none;
+        animation: splash-fade 260ms ease-out;
+      }
+      /* 颗粒噪点:与全局 GrainOverlay 同源(feTurbulence data-URI) */
+      .splash::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.05;
+        mix-blend-mode: overlay;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      }
+      .splash-core {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        animation: splash-rise 420ms cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .splash-logo {
+        filter: drop-shadow(0 4px 18px rgba(59, 130, 246, 0.45));
+      }
+      .splash-name {
+        margin-top: 14px;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .splash-ver {
+        margin-top: 3px;
+        font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
+        font-size: 10px;
+        color: #6b7280;
+      }
+      /* spinner:accent 渐变环 */
+      .splash-spin {
+        margin-top: 22px;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        border: 2.5px solid rgba(255, 255, 255, 0.12);
+        border-top-color: #3b82f6;
+        animation: splash-rotate 0.8s linear infinite;
+      }
+      .splash-hint {
+        margin-top: 10px;
+        font-size: 11px;
+        color: #a1a1aa;
+      }
+      @keyframes splash-fade {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes splash-rise {
+        from { opacity: 0; transform: translateY(10px) scale(0.98); }
+        to { opacity: 1; transform: none; }
+      }
+      @keyframes splash-rotate {
+        to { transform: rotate(360deg); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .splash,
+        .splash-core,
+        .splash-spin {
+          animation: none;
+        }
+      }
+    </style>
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- 启动加载占位:React 挂载后自动替换 -->
+      <div class="splash">
+        <div class="splash-core">
+          <svg class="splash-logo" width="44" height="44" viewBox="0 0 512 512" fill="none">
+            <defs>
+              <linearGradient id="logo-g" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#3b82f6" />
+                <stop offset="1" stop-color="#1d4ed8" />
+              </linearGradient>
+            </defs>
+            <rect x="32" y="32" width="448" height="448" rx="104" fill="url(#logo-g)" />
+            <rect x="32" y="32" width="448" height="448" rx="104" stroke="#ffffff" stroke-opacity="0.16" stroke-width="6" />
+            <g stroke="#ffffff" stroke-opacity="0.5" stroke-width="20" stroke-linecap="round">
+              <line x1="256" y1="178" x2="256" y2="222" />
+              <line x1="256" y1="290" x2="256" y2="334" />
+              <line x1="178" y1="256" x2="222" y2="256" />
+              <line x1="290" y1="256" x2="334" y2="256" />
+            </g>
+            <circle cx="256" cy="162" r="24" fill="#ffffff" opacity="0.95" />
+            <circle cx="256" cy="350" r="24" fill="#ffffff" opacity="0.95" />
+            <circle cx="162" cy="256" r="24" fill="#ffffff" opacity="0.95" />
+            <circle cx="350" cy="256" r="24" fill="#ffffff" opacity="0.95" />
+            <circle cx="256" cy="256" r="40" fill="#ffffff" />
+            <circle cx="256" cy="256" r="16" fill="#1d4ed8" />
+          </svg>
+          <div class="splash-name">skills-hub</div>
+          <div class="splash-ver">v0.1</div>
+          <div class="splash-spin"></div>
+          <div class="splash-hint">正在加载技能库…</div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

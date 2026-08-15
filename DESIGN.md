@@ -278,6 +278,8 @@ src/
 2. 颗粒:`<GrainOverlay/>` fixed inset-0 pointer-events-none z-[1],background-image 为 inline SVG feTurbulence data-URI(`baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'`,200×200),opacity 暗 0.04 / 亮 0.025,mix-blend-mode overlay。单层无动画。
 3. 磨砂:`backdrop-filter: blur(14px) saturate(1.2)` + `--bg-glass` + 1px border,**仅** IconRail、TopToolbar、所有 modal/dropdown。主三列 pane 保持实心扁平。WebView2(Chromium)原生支持。
 
+**全局质感背景开关**(设置 → 外观,`Settings.fancy_background`,默认开启):两层效果——① 窗口层:`tauri.conf.json` 窗口 `transparent: true`,启动 setup 与 `set_window_fancy` 命令按设置 `set_effects(Acrylic)`(Windows 10/11 亚克力,透到桌面);② 页面层:`<html>` 的 `fancy-bg` 类 + CSS——`--bg-app-from/to`、`--bg-pane`、`--settings-bg-base` 覆写为半透明,标记 `.pane` 的主面板容器附加 backdrop blur,叠加 accent 光晕渐变与颗粒噪点。关闭时清除窗口效果、body 纯色、颗粒隐藏、面板实心、`.glass` 浮层去磨砂。依赖系统「透明度效果」开启,否则亚克力退化为不透明。
+
 **字体**:UI `Inter, "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif`;mono `ui-monospace, "JetBrains Mono", Menlo, monospace`(路径/计数/chip)。字号:chip 11 / 行 13 / 标题 14 / caption 12,line-height 1.45。
 
 ---

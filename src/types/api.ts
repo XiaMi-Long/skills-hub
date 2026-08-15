@@ -78,6 +78,8 @@ export interface Settings {
   accent: Accent;
   default_view: SkillOpenView;
   markdown_theme: MarkdownTheme;
+  /** 全局质感背景(渐变 + 颗粒噪点 + 磨砂玻璃 + 半透明面板) */
+  fancy_background: boolean;
   agent_overrides: Record<string, string>;
   deepseek: DeepseekSettings;
 }
@@ -115,6 +117,52 @@ export interface ReplaceAllResult {
 export interface TestDeepseekResult {
   ok: boolean;
   message: string;
+}
+
+/** 远程仓库中的单个技能(list_remote_skills) */
+export interface RemoteSkillInfo {
+  /** 技能目录相对仓库根的路径;空串 = 仓库根即技能 */
+  dir: string;
+  name: string;
+  description: string;
+  file_count: number;
+}
+
+export interface RemoteRepoInfo {
+  owner: string;
+  repo: string;
+  git_ref: string;
+  skills: RemoteSkillInfo[];
+}
+
+export interface RemoteFileMeta {
+  /** 相对技能目录的路径 */
+  path: string;
+  size: number;
+}
+
+/** fetch_remote_skill 返回的预览元信息(文件字节留在 Rust 内存缓存,凭 fetch_id 安装) */
+export interface FetchedSkillMeta {
+  fetch_id: string;
+  owner: string;
+  repo: string;
+  git_ref: string;
+  dir: string;
+  name: string;
+  description: string;
+  /** SKILL.md 去掉 frontmatter 后的正文 */
+  body: string;
+  /** SKILL.md 原文(AI 解读用) */
+  skill_md_raw: string;
+  files: RemoteFileMeta[];
+  skipped: string[];
+}
+
+/** AI 读取技能内容的结果 */
+export interface AiSkillRead {
+  title: string;
+  description: string;
+  summary: string;
 }
 
 /** Rust Result<T, String> 的 JSON 形态:{ Ok: T } | { Err: string } */

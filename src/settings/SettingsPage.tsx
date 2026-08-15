@@ -66,7 +66,7 @@ export default function SettingsPage() {
 
   if (!draft) {
     return (
-      <div className="flex h-full flex-1 items-center justify-center bg-[var(--bg-pane)]">
+      <div className="pane flex h-full flex-1 items-center justify-center bg-[var(--bg-pane)]">
         <span className="text-[13px] text-[var(--text-muted)]">加载设置…</span>
       </div>
     );

@@ -57,7 +57,7 @@ export default function TitleBar() {
   }, [appWindow]);
 
   return (
-    <div className="flex h-[32px] shrink-0 select-none border-b border-[var(--border-subtle)] bg-[var(--bg-pane)]/85">
+    <div className="pane flex h-[32px] shrink-0 select-none border-b border-[var(--border-subtle)] bg-[var(--bg-pane)]/85">
       {/* 左侧:拖拽区(双击最大化) */}
       <div
         data-tauri-drag-region

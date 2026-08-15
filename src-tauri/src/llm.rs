@@ -329,6 +329,11 @@ pub async fn translate_text(ds: &DeepseekSettings, raw: &str) -> Result<String, 
         .map(|t| strip_fences(&t))
 }
 
+/// 通用非流式补全(自定义 system/user),供 AI 解读远程技能等场景复用。
+pub async fn complete_text(ds: &DeepseekSettings, system: &str, user: &str) -> Result<String, String> {
+    chat_completion(ds, build_messages(system, user)).await
+}
+
 // ---- 单技能流式翻译 ----
 
 /// 流式翻译任务:逐 chunk emit `translate-chunk`,结束 emit `translate-done` 并写缓存+清单;

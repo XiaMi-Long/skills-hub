@@ -122,7 +122,7 @@ export default function SkillDetail() {
 
   if (!group || !active) {
     return (
-      <div className="flex h-full items-center justify-center bg-[var(--bg-pane)]">
+      <div className="pane flex h-full items-center justify-center bg-[var(--bg-pane)]">
         <span className="text-[13px] text-[var(--text-muted)]">选择一个技能查看详情</span>
       </div>
     );
@@ -196,7 +196,7 @@ export default function SkillDetail() {
   const canEdit = active.has_skill_md && raw !== null && !translateMode;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[var(--bg-pane)]">
+    <div className="pane flex h-full min-h-0 flex-col bg-[var(--bg-pane)]">
       {/* 头部:标题 + 副本选择 + tabs */}
       <div className="shrink-0 border-b border-[var(--border-subtle)] px-4 pt-3 pb-0">
         <div className="flex items-start justify-between">

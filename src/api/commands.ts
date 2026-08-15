@@ -1,9 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AiSkillRead,
   CheckTranslationResult,
   CountReplaceableResult,
   DeleteScope,
+  FetchedSkillMeta,
   ReadSkillResult,
+  RemoteRepoInfo,
   ReplaceAllResult,
   ScanResult,
   Settings,
@@ -107,3 +110,34 @@ export const replaceAllWithTranslations = () =>
   invoke<ReplaceAllResult>("replace_all_with_translations");
 
 export const testDeepseek = () => invoke<TestDeepseekResult>("test_deepseek");
+
+/** 开/关窗口亚克力透明(质感背景设置项的窗口层部分) */
+export const setWindowFancy = (enabled: boolean) =>
+  invoke<void>("set_window_fancy", { enabled });
+
+// ---- 远程技能(命令添加) ----
+
+/** 解析安装命令/链接,列出 GitHub 仓库内的技能 */
+export const listRemoteSkills = (source: string) =>
+  invoke<RemoteRepoInfo>("list_remote_skills", { source });
+
+/** 下载仓库中某个技能的全部文件,返回预览元信息 */
+export const fetchRemoteSkill = (owner: string, repo: string, gitRef: string, dir: string) =>
+  invoke<FetchedSkillMeta>("fetch_remote_skill", { owner, repo, gitRef, dir });
+
+/** 用 fetch_id 把已获取的远程技能安装到所选 agent */
+export const installRemoteSkill = (
+  fetchId: string,
+  name: string,
+  description: string,
+  bodyMd: string,
+  targets: AgentId[],
+  overwrite: boolean,
+) =>
+  invoke<{ results: [AgentId, { Ok: SkillInstance } | { Err: string }][] }>(
+    "install_remote_skill",
+    { fetchId, name, description, bodyMd, targets, overwrite },
+  );
+
+/** AI 读取 SKILL.md 内容,返回标题/描述/摘要 */
+export const aiReadSkill = (raw: string) => invoke<AiSkillRead>("ai_read_skill", { raw });

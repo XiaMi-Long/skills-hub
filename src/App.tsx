@@ -3,6 +3,8 @@ import AppShell from "./shell/AppShell";
 import GrainOverlay from "./shell/GrainOverlay";
 import ToastHost from "./ui/Toast";
 import { applyTheme, useAppStore } from "./store/app";
+import { applyFancyBackground } from "./lib/fancy";
+import { setWindowFancy } from "./api/commands";
 import { useSkillsStore } from "./store/skills";
 import { useSettingsStore } from "./store/settings";
 import { useTranslateStore } from "./store/translate";
@@ -32,6 +34,12 @@ export default function App() {
       if (saved) {
         useAppStore.getState().setTheme(saved.theme);
         useAppStore.getState().setAccent(saved.accent);
+        // 旧版后端可能不返回该字段 → 按默认开启处理
+        const fancy = saved.fancy_background !== false;
+        applyFancyBackground(fancy);
+        // 窗口亚克力透明由后端在 setup 已按设置应用;此处兜底(旧进程/异常恢复),
+        // 旧后端没有该命令时静默忽略
+        setWindowFancy(fancy).catch(() => {});
       }
     });
     refresh();

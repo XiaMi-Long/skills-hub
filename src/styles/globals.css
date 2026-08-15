@@ -69,15 +69,81 @@ body {
 }
 
 /* 磨砂玻璃:仅浮层/IconRail/TopToolbar */
+/* 注意:-webkit- 必须写在标准属性之前,否则 Tailwind v4 的 Lightning CSS 压缩
+   会把两者按重复声明去重、只保留最后一条,标准 backdrop-filter 会丢失 */
 .glass {
   background: var(--bg-glass);
-  backdrop-filter: blur(14px) saturate(1.2);
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: blur(14px) saturate(1.2);
 }
 
 /* accent 渐变:仅主按钮/active pill/进度条 */
 .accent-gradient {
   background: linear-gradient(90deg, var(--accent-from), var(--accent-to));
+}
+
+/* ===== 全局质感模式(设置项 fancy_background,默认开启)===== */
+/* 开启(html.fancy-bg):accent 渲染渐变背景 + 颗粒噪点 + 磨砂浮层 + 主面板半透明磨砂;
+   关闭:纯色扁平、无颗粒、面板实心、浮层去磨砂。 */
+
+/* 质感模式下:面板 token 更透,颗粒略增强;应用底色也改半透明,
+   配合窗口亚克力(后端 set_window_fancy)让桌面透出来可感知 */
+html.fancy-bg {
+  --bg-app-from: rgba(250, 250, 250, 0.52);
+  --bg-app-to: rgba(240, 240, 242, 0.6);
+  --bg-pane: rgba(255, 255, 255, 0.62);
+  --settings-bg-base: rgba(247, 247, 248, 0.6);
+  --grain-opacity: 0.04;
+}
+html.fancy-bg.dark {
+  --bg-app-from: rgba(11, 11, 13, 0.45);
+  --bg-app-to: rgba(20, 20, 24, 0.55);
+  --bg-pane: rgba(17, 17, 20, 0.55);
+  --settings-bg-base: rgba(14, 14, 19, 0.5);
+  --grain-opacity: 0.055;
+}
+
+/* 质感模式下:body 渐变叠加三层 accent 光晕(更大更浓),
+   面板半透明时能明显透出底下的色彩层次 */
+html.fancy-bg body {
+  background:
+    radial-gradient(
+      1400px 900px at 85% -12%,
+      color-mix(in srgb, var(--accent-from) 32%, transparent),
+      transparent 65%
+    ),
+    radial-gradient(
+      1200px 820px at -8% 112%,
+      color-mix(in srgb, var(--accent-to) 26%, transparent),
+      transparent 62%
+    ),
+    radial-gradient(
+      1000px 560px at 50% 118%,
+      color-mix(in srgb, var(--accent-from) 13%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(180deg, var(--bg-app-from), var(--bg-app-to));
+}
+
+/* 主面板磨砂:.pane 标记在侧栏/列表/详情/标题栏/设置导航等容器上 */
+html.fancy-bg .pane {
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  backdrop-filter: blur(16px) saturate(1.2);
+}
+
+/* 关闭质感:body 改纯色(去渐变) */
+html:not(.fancy-bg) body {
+  background: var(--bg-app-to);
+}
+/* 关闭质感:隐藏颗粒噪点 */
+html:not(.fancy-bg) .grain-overlay {
+  display: none;
+}
+/* 关闭质感:玻璃浮层改实心、去磨砂 */
+html:not(.fancy-bg) .glass {
+  background: var(--bg-pane);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* ===== 按钮系统(重设计)===== */
@@ -105,6 +171,436 @@ body {
 }
 .btn-primary:active {
   filter: brightness(0.95);
+}
+
+/* ===== 色调按钮(accent swatch,设置 → 外观)=====
+   无大圆点:默认是对应颜色的光晕浅渐变;悬停/点击时以光标为原点,
+   颜色以水纹波形式由内向外晕染覆盖(多层半透明渐变,非纯色填充);
+   选中后保留覆盖并叠加缓慢流动的水纹环。 */
+
+@property --ripple {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+@property --ring-shift {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+.accent-swatch {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  background:
+    radial-gradient(
+      130% 150% at 15% -10%,
+      color-mix(in srgb, var(--sw-from) 15%, transparent),
+      transparent 58%
+    ),
+    radial-gradient(
+      130% 150% at 88% 115%,
+      color-mix(in srgb, var(--sw-to) 13%, transparent),
+      transparent 58%
+    );
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+.accent-swatch:hover {
+  border-color: var(--border-strong);
+}
+.accent-swatch:active {
+  transform: scale(0.97);
+}
+.accent-swatch.is-selected {
+  border-color: color-mix(in srgb, var(--sw-to) 55%, var(--border-subtle));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sw-from) 16%, transparent);
+}
+
+/* 悬停/选中时增强的光晕层(用透明度渐变,避免背景突变) */
+.accent-swatch-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(
+      130% 150% at 15% -10%,
+      color-mix(in srgb, var(--sw-from) 26%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      130% 150% at 88% 115%,
+      color-mix(in srgb, var(--sw-to) 22%, transparent),
+      transparent 60%
+    );
+  transition: opacity 320ms ease;
+}
+.accent-swatch:hover .accent-swatch-glow,
+.accent-swatch.is-selected .accent-swatch-glow {
+  opacity: 1;
+}
+
+/* 水纹波:以 --ripple-x/y 为圆心的软边径向渐变,--ripple 从 0% 扩散到覆盖全按钮。
+   波峰处(0.92 半径)有一圈更亮的边,模拟水波前沿。 */
+.accent-swatch-wave {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at var(--ripple-x, 50%) var(--ripple-y, 50%),
+    color-mix(in srgb, var(--sw-from) 30%, transparent) 0%,
+    color-mix(in srgb, var(--sw-to) 22%, transparent) calc(var(--ripple) * 0.7),
+    color-mix(in srgb, var(--sw-to) 40%, transparent) calc(var(--ripple) * 0.92),
+    transparent var(--ripple)
+  );
+  transition: --ripple 520ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.accent-swatch:hover .accent-swatch-wave {
+  --ripple: 150%;
+}
+.accent-swatch.is-selected .accent-swatch-wave {
+  --ripple: 190%;
+}
+
+/* 水纹环:选中后缓慢向外流动的同心圆环(周期 13px,位移 13px 无缝循环) */
+.accent-swatch-rings {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: repeating-radial-gradient(
+    circle at var(--ripple-x, 50%) var(--ripple-y, 50%),
+    transparent calc(0px + var(--ring-shift)),
+    transparent calc(9px + var(--ring-shift)),
+    color-mix(in srgb, var(--sw-to) 15%, transparent) calc(10px + var(--ring-shift)),
+    transparent calc(13px + var(--ring-shift))
+  );
+  transition: opacity 400ms ease;
+}
+.accent-swatch.is-selected .accent-swatch-rings {
+  opacity: 1;
+  animation: swatch-ring-flow 2.6s linear infinite;
+}
+@keyframes swatch-ring-flow {
+  to {
+    --ring-shift: 13px;
+  }
+}
+
+/* 小渐变条:取代原来的大圆点,选中时拉长 + 光晕加强 */
+.accent-swatch-bar {
+  width: 18px;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--sw-from), var(--sw-to));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--sw-from) 45%, transparent);
+  transition:
+    width 240ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 240ms ease;
+}
+.accent-swatch.is-selected .accent-swatch-bar {
+  width: 28px;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--sw-from) 65%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .accent-swatch-wave {
+    transition: none;
+  }
+  .accent-swatch.is-selected .accent-swatch-rings {
+    animation: none;
+  }
+}
+
+/* ===== 主题按钮(设置 → 外观):复用 accent-swatch 水纹体系 + 功能性小动画 =====
+   暗色 = 月牙 + 星星闪烁;亮色 = 太阳 + 光芒旋转;跟随系统 = 屏幕昼夜流转。
+   动画仅在悬停/选中时运行,避免常态干扰。 */
+
+.theme-ico {
+  position: relative;
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+/* --- 暗色:月牙(inset shadow 切出) + 两颗闪烁星星 --- */
+.theme-ico-dark::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 3px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  box-shadow: inset -4px 3px 0 0 #c7d2fe;
+  transition: filter 300ms ease;
+}
+.accent-swatch:hover .theme-ico-dark::before,
+.accent-swatch.is-selected .theme-ico-dark::before {
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--sw-to) 75%, transparent));
+}
+.theme-ico-dark .star {
+  position: absolute;
+  width: 2.5px;
+  height: 2.5px;
+  border-radius: 50%;
+  background: #e0e7ff;
+  opacity: 0.35;
+}
+.theme-ico-dark .s1 {
+  right: 2px;
+  top: 3px;
+}
+.theme-ico-dark .s2 {
+  right: 6px;
+  bottom: 2px;
+  width: 2px;
+  height: 2px;
+}
+.accent-swatch:hover .theme-ico-dark .s1,
+.accent-swatch.is-selected .theme-ico-dark .s1 {
+  animation: star-twinkle 1.8s ease-in-out infinite;
+}
+.accent-swatch:hover .theme-ico-dark .s2,
+.accent-swatch.is-selected .theme-ico-dark .s2 {
+  animation: star-twinkle 1.8s ease-in-out 0.9s infinite;
+}
+@keyframes star-twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.3);
+  }
+}
+
+/* --- 亮色:太阳核心 + conic 光芒环(悬停/选中缓慢旋转) --- */
+.theme-ico-light::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fde68a, #f59e0b);
+  transition: filter 300ms ease;
+}
+.accent-swatch:hover .theme-ico-light::before,
+.accent-swatch.is-selected .theme-ico-light::before {
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--sw-from) 70%, transparent));
+}
+.theme-ico-light::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+    from 0deg,
+    color-mix(in srgb, #f59e0b 85%, transparent) 0deg 5deg,
+    transparent 5deg 45deg
+  );
+  -webkit-mask: radial-gradient(circle, transparent 42%, #000 43%, #000 64%, transparent 65%);
+  mask: radial-gradient(circle, transparent 42%, #000 43%, #000 64%, transparent 65%);
+  opacity: 0.65;
+  transition: opacity 300ms ease;
+}
+.accent-swatch:hover .theme-ico-light::after,
+.accent-swatch.is-selected .theme-ico-light::after {
+  opacity: 1;
+  animation: rays-spin 9s linear infinite;
+}
+@keyframes rays-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --- 跟随系统:小屏幕内昼夜渐变来回流转 --- */
+.theme-ico-system::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 3px;
+  width: 16px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1.5px solid color-mix(in srgb, var(--text-primary) 55%, transparent);
+}
+.theme-ico-system::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 6px;
+  width: 10px;
+  height: 6px;
+  border-radius: 1.5px;
+  background: linear-gradient(100deg, #4338ca, #818cf8 45%, #fcd34d 55%, #fbbf24);
+  background-size: 220% 100%;
+  background-position: 50% 0;
+}
+.accent-swatch:hover .theme-ico-system::after,
+.accent-swatch.is-selected .theme-ico-system::after {
+  animation: day-night-drift 3.2s ease-in-out infinite alternate;
+}
+.theme-ico-system .stand {
+  position: absolute;
+  left: 7px;
+  bottom: 1px;
+  width: 6px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--text-primary) 45%, transparent);
+}
+@keyframes day-night-drift {
+  from {
+    background-position: 12% 0;
+  }
+  to {
+    background-position: 88% 0;
+  }
+}
+
+/* ===== 质感背景卡片的迷你窗口演示(fancy-preview)=====
+   开:渐变光晕漂移 + 颗粒 + 面板半透明 + 玻璃高光扫过;关:实心扁平。 */
+
+.fancy-preview {
+  position: relative;
+  width: 128px;
+  height: 78px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: linear-gradient(180deg, var(--bg-app-from), var(--bg-app-to));
+  transition:
+    border-color 400ms ease,
+    box-shadow 400ms ease;
+}
+.fancy-preview.is-on {
+  border-color: color-mix(in srgb, var(--accent-from) 40%, var(--border-subtle));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent-from) 22%, transparent);
+}
+/* 光晕层(开启后显现并缓慢漂移) */
+.fancy-preview-glow {
+  position: absolute;
+  inset: -20%;
+  opacity: 0;
+  background:
+    radial-gradient(
+      60% 80% at 80% 0%,
+      color-mix(in srgb, var(--accent-from) 55%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      60% 80% at 10% 100%,
+      color-mix(in srgb, var(--accent-to) 45%, transparent),
+      transparent 60%
+    );
+  transition: opacity 500ms ease;
+}
+.fancy-preview.is-on .fancy-preview-glow {
+  opacity: 1;
+  animation: fp-glow-drift 5s ease-in-out infinite alternate;
+}
+@keyframes fp-glow-drift {
+  from {
+    transform: translate3d(-3%, -2%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(3%, 2%, 0) scale(1.07);
+  }
+}
+/* 迷你标题栏 + 三面板:开启时面板半透明,透出新光晕 */
+.fancy-preview-titlebar {
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  right: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--bg-elevated);
+  opacity: 0.9;
+}
+.fancy-preview-panes {
+  position: absolute;
+  inset: 15px 6px 6px;
+  display: flex;
+  gap: 3px;
+}
+.fancy-preview-panes i {
+  flex: 1;
+  border-radius: 3px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  transition: background 500ms ease;
+}
+.fancy-preview.is-on .fancy-preview-panes i {
+  background: color-mix(in srgb, var(--bg-elevated) 52%, transparent);
+  backdrop-filter: blur(2px);
+}
+/* 颗粒层(与全局同源) */
+.fancy-preview-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  transition: opacity 500ms ease;
+}
+.fancy-preview.is-on .fancy-preview-grain {
+  opacity: 0.07;
+}
+/* 玻璃高光:开启后周期性斜向扫过 */
+.fancy-preview-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 32%,
+    rgba(255, 255, 255, 0.15) 46%,
+    rgba(255, 255, 255, 0.04) 54%,
+    transparent 68%
+  );
+  transform: translateX(-130%);
+}
+.fancy-preview.is-on .fancy-preview-sheen {
+  animation: fp-sheen 3.8s cubic-bezier(0.4, 0, 0.2, 1) 0.8s infinite;
+}
+@keyframes fp-sheen {
+  0% {
+    transform: translateX(-130%);
+  }
+  55%,
+  100% {
+    transform: translateX(130%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .accent-swatch:hover .theme-ico-dark .s1,
+  .accent-swatch.is-selected .theme-ico-dark .s1,
+  .accent-swatch:hover .theme-ico-dark .s2,
+  .accent-swatch.is-selected .theme-ico-dark .s2,
+  .accent-swatch:hover .theme-ico-light::after,
+  .accent-swatch.is-selected .theme-ico-light::after,
+  .accent-swatch:hover .theme-ico-system::after,
+  .accent-swatch.is-selected .theme-ico-system::after,
+  .fancy-preview.is-on .fancy-preview-glow,
+  .fancy-preview.is-on .fancy-preview-sheen {
+    animation: none;
+  }
 }
 
 

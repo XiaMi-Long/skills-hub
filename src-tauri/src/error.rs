@@ -15,6 +15,8 @@ pub enum AppError {
     Settings(String),
     #[error("DeepSeek 错误: {0}")]
     Llm(String),
+    #[error("远程获取失败: {0}")]
+    Remote(String),
     #[error("内部错误: {0}")]
     Internal(String),
 }
@@ -28,6 +30,7 @@ impl AppError {
             AppError::Json(_) => "json",
             AppError::Settings(_) => "settings",
             AppError::Llm(_) => "llm",
+            AppError::Remote(_) => "remote",
             AppError::Internal(_) => "internal",
         }
     }

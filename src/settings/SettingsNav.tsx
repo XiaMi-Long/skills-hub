@@ -47,7 +47,7 @@ export default function SettingsNav({
   onSelect: (c: SettingsCategory) => void;
 }) {
   return (
-    <nav className="flex w-[200px] shrink-0 flex-col gap-1 border-r border-[var(--border-subtle)] bg-[var(--bg-pane)] p-3">
+    <nav className="pane flex w-[200px] shrink-0 flex-col gap-1 border-r border-[var(--border-subtle)] bg-[var(--bg-pane)] p-3">
       {ORDER.map((id) => {
         const isActive = id === active;
         return (

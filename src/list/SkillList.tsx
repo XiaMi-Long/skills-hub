@@ -43,7 +43,7 @@ export default function SkillList() {
   }, [scan, search, agentFilter]);
 
   return (
-    <div className="flex h-full flex-col bg-[var(--bg-pane)]">
+    <div className="pane flex h-full flex-col bg-[var(--bg-pane)]">
       {/* 搜索框 */}
       <div className="px-3 pt-3 pb-2">
         <div className="relative">
