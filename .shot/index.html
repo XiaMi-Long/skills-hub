@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN" class="dark fancy-bg">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>skills-hub · shot</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // 截图调试:捕获渲染错误并直接显示在页面上
+      window.addEventListener("error", (e) => {
+        document.body.insertAdjacentHTML(
+          "beforeend",
+          '<pre style="color:#f87171;white-space:pre-wrap;font-size:12px;padding:12px">' +
+            (e.message || e.error) + "\n" + ((e.error && e.error.stack) || "") + "</pre>",
+        );
+      });
+      window.addEventListener("unhandledrejection", (e) => {
+        document.body.insertAdjacentHTML(
+          "beforeend",
+          '<pre style="color:#fbbf24;white-space:pre-wrap;font-size:12px;padding:12px">' +
+            (e.reason && e.reason.message ? e.reason.message : e.reason) +
+            "\n" + ((e.reason && e.reason.stack) || "") + "</pre>",
+        );
+      });
+    </script>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>
