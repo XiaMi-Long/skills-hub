@@ -4,7 +4,6 @@ import { applyFancyBackground } from "../../lib/fancy";
 import { setWindowFancy } from "../../api/commands";
 import { useAppStore } from "../../store/app";
 import Checkbox from "../../ui/Checkbox";
-import Markdown from "../../md/Markdown";
 import SectionTitle from "../SectionTitle";
 import { toast } from "../../store/toast";
 import type { Accent, MarkdownTheme, Settings, Theme } from "../../types/api";
@@ -16,27 +15,12 @@ const THEMES: { id: Theme; label: string; from: string; to: string }[] = [
 ];
 
 /** Markdown 排版主题配置(设置选择用):from/to 用于按钮水纹与图形标识 */
-const MARKDOWN_THEMES: { id: MarkdownTheme; label: string; desc: string; from: string; to: string }[] = [
-  { id: "default", label: "极简", desc: "当前默认排版", from: "#64748b", to: "#94a3b8" },
-  { id: "docs", label: "文档", desc: "accent 分隔线的文档风", from: "#2563eb", to: "#3b82f6" },
-  { id: "paper", label: "暖纸", desc: "衬线标题的阅读风", from: "#d97706", to: "#f59e0b" },
-  { id: "compact", label: "紧凑", desc: "高密度开发风", from: "#0891b2", to: "#22d3ee" },
+const MARKDOWN_THEMES: { id: MarkdownTheme; label: string; from: string; to: string }[] = [
+  { id: "default", label: "极简", from: "#64748b", to: "#94a3b8" },
+  { id: "docs", label: "文档", from: "#2563eb", to: "#3b82f6" },
+  { id: "paper", label: "暖纸", from: "#d97706", to: "#f59e0b" },
+  { id: "compact", label: "紧凑", from: "#0891b2", to: "#22d3ee" },
 ];
-
-/** 阅读样式预览用的迷你 markdown 样例 */
-const SAMPLE = `## 技能说明
-
-正文段落用于预览排版效果。
-
-- 列表项 A
-- 列表项 B
-
-> 引用示例
-
-\`\`\`js
-const skill = 1;
-\`\`\`
-`;
 
 /**
  * @description 外观面板:主题三卡片(图标式,无粗糙 mock)+ 色调 swatch + 应用效果条。
@@ -288,21 +272,6 @@ export default function AppearancePanel({
               </button>
             );
           })}
-        </div>
-
-        {/* 实时预览:跟随当前所选排版即时渲染 */}
-        <div className="mt-3 rounded-[12px] border border-[var(--border-subtle)] bg-[var(--bg-pane)]/60 p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-[11px] font-medium text-[var(--text-secondary)]">
-              实时预览 · {MARKDOWN_THEMES.find((t) => t.id === draft.markdown_theme)?.label}
-            </span>
-            <span className="text-[10px] text-[var(--text-muted)]">
-              {MARKDOWN_THEMES.find((t) => t.id === draft.markdown_theme)?.desc}
-            </span>
-          </div>
-          <div className="pointer-events-none max-h-44 overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-pane)] px-4 py-3">
-            <Markdown text={SAMPLE} theme={draft.markdown_theme} />
-          </div>
         </div>
       </section>
     </div>
