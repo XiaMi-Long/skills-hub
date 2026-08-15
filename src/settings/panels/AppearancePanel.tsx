@@ -15,12 +15,12 @@ const THEMES: { id: Theme; label: string; from: string; to: string }[] = [
   { id: "system", label: "跟随系统", from: "#38bdf8", to: "#818cf8" },
 ];
 
-/** Markdown 排版主题配置(设置选择用) */
-const MARKDOWN_THEMES: { id: MarkdownTheme; label: string; desc: string }[] = [
-  { id: "default", label: "极简", desc: "当前默认排版" },
-  { id: "docs", label: "文档", desc: "accent 分隔线的文档风" },
-  { id: "paper", label: "暖纸", desc: "衬线标题的阅读风" },
-  { id: "compact", label: "紧凑", desc: "高密度开发风" },
+/** Markdown 排版主题配置(设置选择用):from/to 用于按钮水纹与图形标识 */
+const MARKDOWN_THEMES: { id: MarkdownTheme; label: string; desc: string; from: string; to: string }[] = [
+  { id: "default", label: "极简", desc: "当前默认排版", from: "#64748b", to: "#94a3b8" },
+  { id: "docs", label: "文档", desc: "accent 分隔线的文档风", from: "#2563eb", to: "#3b82f6" },
+  { id: "paper", label: "暖纸", desc: "衬线标题的阅读风", from: "#d97706", to: "#f59e0b" },
+  { id: "compact", label: "紧凑", desc: "高密度开发风", from: "#0891b2", to: "#22d3ee" },
 ];
 
 /** 阅读样式预览用的迷你 markdown 样例 */
@@ -72,8 +72,6 @@ export default function AppearancePanel({
     e.currentTarget.style.setProperty("--ripple-x", `${x.toFixed(1)}%`);
     e.currentTarget.style.setProperty("--ripple-y", `${y.toFixed(1)}%`);
   };
-
-  const accentDef = ACCENTS.find((a) => a.id === draft.accent) ?? ACCENTS[0];
 
   return (
     <div className="space-y-8">
@@ -187,25 +185,6 @@ export default function AppearancePanel({
             );
           })}
         </div>
-
-        {/* 应用效果条:直观展示当前色调落在按钮/选中态上的样子 */}
-        <div className="mt-4 flex items-center gap-3 rounded-[12px] border border-[var(--border-subtle)] bg-[var(--bg-pane)]/60 p-3">
-          <span className="text-[11px] text-[var(--text-muted)]">应用效果</span>
-          <span
-            className="h-2.5 flex-1 rounded-full"
-            style={{ background: `linear-gradient(90deg, ${accentDef.from}, ${accentDef.to})` }}
-          />
-          <span className="rounded-[8px] px-3 py-1 text-[11px] text-white" style={{ background: `linear-gradient(180deg, color-mix(in srgb, ${accentDef.from} 88%, #fff 12%), color-mix(in srgb, ${accentDef.to} 90%, #000 10%))` }}>
-            主按钮
-          </span>
-          <span
-            className="flex items-center gap-1.5 rounded-[8px] border px-2.5 py-1 text-[11px]"
-            style={{ borderColor: accentDef.to, color: accentDef.to }}
-          >
-            <span className="h-2 w-2 rounded-full" style={{ background: accentDef.from }} />
-            选中态
-          </span>
-        </div>
       </section>
 
       {/* 背景质感:窗口亚克力透明 + 渐变 + 颗粒噪点 + 磨砂玻璃 + 半透明面板;
@@ -243,32 +222,65 @@ export default function AppearancePanel({
         </div>
       </section>
 
-      {/* 阅读样式:Markdown 排版主题,真实渲染预览 */}
+      {/* 阅读样式:与主题/色调同体系的胶囊按钮(文字线条图形 + 波动动画),
+          下方单区实时预览按当前所选排版渲染样例 */}
       <section>
         <SectionTitle title="阅读样式" desc="技能预览的 Markdown 排版主题" />
-        <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-wrap gap-2.5">
           {MARKDOWN_THEMES.map((t) => {
             const selected = draft.markdown_theme === t.id;
             return (
               <button
                 key={t.id}
-                onClick={() => onChange({ ...draft, markdown_theme: t.id })}
-                className={`relative rounded-[12px] border p-2.5 text-left transition-all duration-150 ${
+                onClick={(e) => {
+                  setRippleOrigin(e);
+                  onChange({ ...draft, markdown_theme: t.id });
+                }}
+                onMouseEnter={setRippleOrigin}
+                className={`accent-swatch flex items-center rounded-[10px] px-4 py-2.5 text-[12px] ${
                   selected
-                    ? "border-[var(--accent-to)] bg-[var(--bg-elevated)] shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent-from)_16%,transparent)]"
-                    : "border-[var(--border-subtle)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]/40"
+                    ? "is-selected text-[var(--text-primary)]"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 }`}
+                style={{ "--sw-from": t.from, "--sw-to": t.to } as CSSProperties}
               >
-                <div className="pointer-events-none max-h-28 overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-pane)] px-3 py-2">
-                  <Markdown text={SAMPLE} theme={t.id} />
-                </div>
-                <div className="mt-2 flex items-center justify-between">
-                  <span className="text-[12px] font-medium text-[var(--text-primary)]">{t.label}</span>
-                  <span className="text-[10px] text-[var(--text-muted)]">{t.desc}</span>
-                </div>
+                <span className="accent-swatch-glow" aria-hidden />
+                <span className="accent-swatch-wave" aria-hidden />
+                <span className="relative flex items-center gap-2">
+                  <span className={`md-ico md-ico-${t.id}`} aria-hidden>
+                    {t.id === "paper" ? (
+                      <span className="aa">Aa</span>
+                    ) : t.id === "compact" ? (
+                      <>
+                        <i />
+                        <i />
+                        <i />
+                        <i />
+                      </>
+                    ) : (
+                      <>
+                        <i />
+                        <i />
+                        <i />
+                      </>
+                    )}
+                  </span>
+                  {t.label}
+                </span>
                 {selected && (
-                  <span className="accent-gradient absolute top-3.5 right-3.5 flex h-4 w-4 items-center justify-center rounded-full">
-                    <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <span
+                    className="absolute top-1.5 right-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full text-white"
+                    style={{ background: `linear-gradient(135deg, ${t.from}, ${t.to})` }}
+                  >
+                    <svg
+                      className="h-2 w-2"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
                       <path d="M20 6 9 17l-5-5" />
                     </svg>
                   </span>
@@ -276,6 +288,21 @@ export default function AppearancePanel({
               </button>
             );
           })}
+        </div>
+
+        {/* 实时预览:跟随当前所选排版即时渲染 */}
+        <div className="mt-3 rounded-[12px] border border-[var(--border-subtle)] bg-[var(--bg-pane)]/60 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+              实时预览 · {MARKDOWN_THEMES.find((t) => t.id === draft.markdown_theme)?.label}
+            </span>
+            <span className="text-[10px] text-[var(--text-muted)]">
+              {MARKDOWN_THEMES.find((t) => t.id === draft.markdown_theme)?.desc}
+            </span>
+          </div>
+          <div className="pointer-events-none max-h-44 overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-pane)] px-4 py-3">
+            <Markdown text={SAMPLE} theme={draft.markdown_theme} />
+          </div>
         </div>
       </section>
     </div>

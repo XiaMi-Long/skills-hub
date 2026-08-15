@@ -32,7 +32,7 @@ export default defineConfig({
     socialLinks: [{ icon: "github", link: "https://github.com/XiaMi-Long/skills-hub" }],
     footer: {
       message: "Rust + Tauri v2 · React 19 · 本地优先",
-      copyright: "MIT License",
+      copyright: "skills-hub",
     },
     outline: { label: "本页目录" },
     docFooter: { prev: "上一篇", next: "下一篇" },

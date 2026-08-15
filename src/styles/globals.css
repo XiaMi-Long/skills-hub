@@ -470,6 +470,122 @@ html:not(.fancy-bg) .glass {
   }
 }
 
+/* ===== 阅读样式按钮(.md-ico 文字线条图形,设置 → 外观)=====
+   极简=三条均匀线;文档=渐变粗标题条 + 正文;暖纸=衬线 Aa;紧凑=四条密线。
+   悬停/选中时线条依次波动(写作感),暖纸为呼吸光晕。 */
+
+.md-ico {
+  position: relative;
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.md-ico i {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  height: 2px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--sw-to) 55%, var(--text-muted));
+}
+/* 极简:三条均匀线 */
+.md-ico-default i:nth-child(1) {
+  top: 4px;
+}
+.md-ico-default i:nth-child(2) {
+  top: 9px;
+}
+.md-ico-default i:nth-child(3) {
+  top: 14px;
+}
+/* 文档:渐变粗标题条 + 两行正文 */
+.md-ico-docs i:nth-child(1) {
+  top: 3px;
+  height: 4px;
+  background: linear-gradient(90deg, var(--sw-from), var(--sw-to));
+}
+.md-ico-docs i:nth-child(2) {
+  top: 10px;
+}
+.md-ico-docs i:nth-child(3) {
+  top: 14px;
+  right: 7px;
+}
+/* 紧凑:四条密细线 */
+.md-ico-compact i {
+  height: 1.5px;
+}
+.md-ico-compact i:nth-child(1) {
+  top: 3px;
+}
+.md-ico-compact i:nth-child(2) {
+  top: 7px;
+}
+.md-ico-compact i:nth-child(3) {
+  top: 11px;
+}
+.md-ico-compact i:nth-child(4) {
+  top: 15px;
+  right: 6px;
+}
+/* 暖纸:衬线 Aa */
+.md-ico-paper .aa {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: Georgia, "Songti SC", "SimSun", serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--sw-to) 70%, var(--text-secondary));
+  transition: text-shadow 300ms ease;
+}
+/* 悬停/选中:线条依次波动 */
+.accent-swatch:hover .md-ico i,
+.accent-swatch.is-selected .md-ico i {
+  animation: md-line-wave 1.8s ease-in-out infinite;
+}
+.accent-swatch:hover .md-ico i:nth-child(2),
+.accent-swatch.is-selected .md-ico i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.accent-swatch:hover .md-ico i:nth-child(3),
+.accent-swatch.is-selected .md-ico i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+.accent-swatch:hover .md-ico i:nth-child(4),
+.accent-swatch.is-selected .md-ico i:nth-child(4) {
+  animation-delay: 0.6s;
+}
+@keyframes md-line-wave {
+  0%,
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+  50% {
+    opacity: 0.45;
+    transform: translateX(1.5px);
+  }
+}
+/* 暖纸:呼吸光晕 */
+.accent-swatch:hover .md-ico-paper .aa,
+.accent-swatch.is-selected .md-ico-paper .aa {
+  text-shadow: 0 0 8px color-mix(in srgb, var(--sw-to) 60%, transparent);
+  animation: md-paper-breathe 2.2s ease-in-out infinite;
+}
+@keyframes md-paper-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
 /* ===== 质感背景卡片的迷你窗口演示(fancy-preview)=====
    开:渐变光晕漂移 + 颗粒 + 面板半透明 + 玻璃高光扫过;关:实心扁平。 */
 
@@ -597,6 +713,10 @@ html:not(.fancy-bg) .glass {
   .accent-swatch.is-selected .theme-ico-light::after,
   .accent-swatch:hover .theme-ico-system::after,
   .accent-swatch.is-selected .theme-ico-system::after,
+  .accent-swatch:hover .md-ico i,
+  .accent-swatch.is-selected .md-ico i,
+  .accent-swatch:hover .md-ico-paper .aa,
+  .accent-swatch.is-selected .md-ico-paper .aa,
   .fancy-preview.is-on .fancy-preview-glow,
   .fancy-preview.is-on .fancy-preview-sheen {
     animation: none;
